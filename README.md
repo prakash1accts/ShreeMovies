@@ -123,3 +123,5 @@ scripts/
 ## Notes on the seat map
 
 Seats are laid out automatically as a grid (rows × columns) per screen when you create a showtime — the default is 8 rows × 10 seats, configurable per screen in the admin showtime form. If you send me a photo or diagram of your actual theater's seating layout, I can update the seat map to match it exactly (irregular rows, aisles, wheelchair spots, VIP sections, etc.) instead of a plain grid.
+
+<!-- deployment trigger 2026-08-04T14:04:20Z -->
