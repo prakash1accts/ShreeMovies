@@ -39,11 +39,16 @@ export default function AdminShowtimeForm({
           required
           className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
         >
-          {screens.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name} ({s.rows}x{s.cols})
-            </option>
-          ))}
+          {screens.map((s) => {
+            const seatCount = s.layout_json
+              ? s.layout_json.rows.reduce((sum, r) => sum + r.seatNumbers.length, 0)
+              : s.rows * s.cols;
+            return (
+              <option key={s.id} value={s.id}>
+                {s.name} ({seatCount} seats{s.layout_json ? ", real layout" : ""})
+              </option>
+            );
+          })}
         </select>
       </div>
       <div>

@@ -11,7 +11,9 @@ import {
   deleteShowtime,
   listScreens,
   listTheaters,
+  updateScreenLayout,
 } from "@/lib/data";
+import { layoutMaxSeatNumber, REAL_SCREENS } from "@/lib/real-screens";
 
 export async function createMovieAction(
   _prevState: { error?: string } | undefined,
@@ -63,6 +65,78 @@ export async function ensureDefaultTheaterAndScreen() {
     screens = await listScreens(theaters[0].id);
   }
   return { theater: theaters[0], screen: screens[0] };
+}
+
+// Creates (or, if they already exist by name, updates in place) the real
+// seat maps for Screen 4, Screen 6, and Screen 7 — transcribed from the
+// theater's own box-office seating-chart photos. Safe to click more than
+// once: it never creates duplicate screens.
+export async function loadRealScreensAction() {
+  await requireAdmin();
+
+  let theaters = await listTheaters();
+  if (theaters.length === 0) {
+    await createTheater("Shree Movies");
+    theaters = await listTheaters();
+  }
+  const theater = theaters[0];
+  const existingScreens = await listScreens(theater.id);
+
+  for (const def of REAL_SCREENS) {
+    const existing = existingScreens.find((s) => s.name === def.name);
+    const rowCount = def.layout.rows.length;
+    const maxSeat = layoutMaxSeatNumber(def.layout);
+    if (existing) {
+      await updateScreenLayout({
+        screenId: existing.id,
+        layout: def.layout,
+        rows: rowCount,
+        cols: maxSeat,
+      });
+    } else {
+      await createScreen({
+        theaterId: theater.id,
+        name: def.name,
+        rows: rowCount,
+        cols: maxSeat,
+        layout: def.layout,
+      });
+    }
+  }
+
+  revalidatePath("/admin/screens");
+  revalidatePath("/admin/showtimes");
+}
+
+export async function createGridScreenAction(
+  _prevState: { error?: string } | undefined,
+  formData: FormData
+) {
+  await requireAdmin();
+
+  const name = String(formData.get("name") || "").trim();
+  const rows = Number(formData.get("rows") || 8);
+  const cols = Number(formData.get("cols") || 10);
+
+  if (!name) return { error: "Screen name is required." };
+  if (!Number.isFinite(rows) || rows < 1 || rows > 26) {
+    return { error: "Rows must be between 1 and 26." };
+  }
+  if (!Number.isFinite(cols) || cols < 1 || cols > 60) {
+    return { error: "Seats per row must be between 1 and 60." };
+  }
+
+  let theaters = await listTheaters();
+  if (theaters.length === 0) {
+    await createTheater("Shree Movies");
+    theaters = await listTheaters();
+  }
+
+  await createScreen({ theaterId: theaters[0].id, name, rows, cols });
+
+  revalidatePath("/admin/screens");
+  revalidatePath("/admin/showtimes");
+  return { error: undefined };
 }
 
 export async function createShowtimeAction(

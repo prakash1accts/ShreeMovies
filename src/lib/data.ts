@@ -3,6 +3,7 @@ import type {
   Booking,
   Movie,
   Screen,
+  ScreenLayout,
   Seat,
   Showtime,
   Theater,
@@ -117,11 +118,35 @@ export async function createScreen(params: {
   name: string;
   rows?: number;
   cols?: number;
+  layout?: ScreenLayout;
 }): Promise<Screen> {
   const id = genId("scr");
   const { rows } = await query<Screen>(
-    "INSERT INTO screens (id, theater_id, name, rows, cols) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-    [id, params.theaterId, params.name, params.rows ?? 8, params.cols ?? 10]
+    "INSERT INTO screens (id, theater_id, name, rows, cols, layout_json) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+    [
+      id,
+      params.theaterId,
+      params.name,
+      params.rows ?? 8,
+      params.cols ?? 10,
+      params.layout ? JSON.stringify(params.layout) : null,
+    ]
+  );
+  return rows[0];
+}
+
+// Updates an existing screen's real seat map in place (used when re-loading
+// the theater's official layouts — safe to run repeatedly since it matches
+// by screen id, not by inserting a new row).
+export async function updateScreenLayout(params: {
+  screenId: string;
+  layout: ScreenLayout;
+  rows: number;
+  cols: number;
+}): Promise<Screen> {
+  const { rows } = await query<Screen>(
+    "UPDATE screens SET layout_json = $1, rows = $2, cols = $3 WHERE id = $4 RETURNING *",
+    [JSON.stringify(params.layout), params.rows, params.cols, params.screenId]
   );
   return rows[0];
 }
@@ -187,7 +212,18 @@ export async function createShowtime(params: {
       [params.screenId]
     );
     const screen = screenRows[0];
-    if (screen) {
+    if (screen?.layout_json) {
+      // Real seat map: only create the seats that actually exist, in their
+      // real rows/numbers — gaps (aisles, pillars, doors) are simply absent.
+      for (const row of screen.layout_json.rows) {
+        for (const seatNumber of row.seatNumbers) {
+          await client.query(
+            "INSERT INTO seats (id, showtime_id, row_label, col_number, status) VALUES ($1, $2, $3, $4, 'available')",
+            [genId("seat"), id, row.label, seatNumber]
+          );
+        }
+      }
+    } else if (screen) {
       for (let r = 0; r < screen.rows; r++) {
         const rowLabel = String.fromCharCode(65 + r); // A, B, C...
         for (let c = 1; c <= screen.cols; c++) {

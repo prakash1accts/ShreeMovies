@@ -30,6 +30,15 @@ export default function SeatPicker({
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [seats]);
 
+  // Real seat maps have irregular rows (gaps for aisles, pillars, short
+  // rows). Placing every seat in a CSS grid column that matches its actual
+  // seat number (instead of just packing seats next to each other) makes
+  // those real gaps show up on screen instead of hiding them.
+  const maxCol = useMemo(
+    () => seats.reduce((max, s) => Math.max(max, s.col_number), 0),
+    [seats]
+  );
+
   function toggleSeat(seat: Seat) {
     if (seat.status !== "available") return;
     setSelected((prev) => {
@@ -50,14 +59,20 @@ export default function SeatPicker({
         </div>
       </div>
 
-      <div className="flex flex-col items-center gap-2">
-        {rows.map(([rowLabel, rowSeats]) => (
-          <div key={rowLabel} className="flex items-center gap-2">
-            <span className="w-4 text-xs text-neutral-500">{rowLabel}</span>
-            <div className="flex gap-1.5">
-              {rowSeats
-                .sort((a, b) => a.col_number - b.col_number)
-                .map((seat) => {
+      {/* The outer div owns the horizontal scroll (for wide real seat maps on
+          narrow screens); the inner div centers itself via mx-auto when it's
+          narrower than the viewport, and simply left-aligns (scroll starts
+          at the true left edge, row labels included) when it's wider. */}
+      <div className="overflow-x-auto px-2">
+        <div className="flex w-fit flex-col gap-1.5 mx-auto">
+          {rows.map(([rowLabel, rowSeats]) => (
+            <div key={rowLabel} className="flex items-center gap-2">
+              <span className="w-4 shrink-0 text-xs text-neutral-500">{rowLabel}</span>
+              <div
+                className="grid gap-1.5"
+                style={{ gridTemplateColumns: `repeat(${maxCol}, 1.5rem)` }}
+              >
+                {rowSeats.map((seat) => {
                   const isSelected = selected.has(seat.id);
                   const isTaken = seat.status !== "available";
                   return (
@@ -67,8 +82,9 @@ export default function SeatPicker({
                       disabled={isTaken}
                       onClick={() => toggleSeat(seat)}
                       title={`${rowLabel}${seat.col_number}`}
+                      style={{ gridColumnStart: seat.col_number }}
                       className={[
-                        "h-7 w-7 rounded-t-md text-[10px] font-medium transition",
+                        "h-6 w-6 rounded-t-md text-[9px] font-medium leading-6 transition",
                         isTaken
                           ? "cursor-not-allowed bg-neutral-800 text-neutral-700"
                           : isSelected
@@ -80,9 +96,10 @@ export default function SeatPicker({
                     </button>
                   );
                 })}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-neutral-400">

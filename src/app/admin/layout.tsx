@@ -27,6 +27,12 @@ export default async function AdminLayout({
           Movies
         </Link>
         <Link
+          href="/admin/screens"
+          className="rounded-md px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
+        >
+          Screens
+        </Link>
+        <Link
           href="/admin/showtimes"
           className="rounded-md px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
         >

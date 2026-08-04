@@ -20,8 +20,13 @@ CREATE TABLE IF NOT EXISTS screens (
   theater_id TEXT NOT NULL REFERENCES theaters(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   rows INTEGER NOT NULL DEFAULT 8,
-  cols INTEGER NOT NULL DEFAULT 10
+  cols INTEGER NOT NULL DEFAULT 10,
+  -- Optional real seat map: { rows: [{ label: "A", seatNumbers: [3,4,5,...] }, ...] }.
+  -- When set, showtimes on this screen use this exact layout (with its real
+  -- gaps for aisles/pillars) instead of a plain rows x cols grid.
+  layout_json JSONB
 );
+ALTER TABLE screens ADD COLUMN IF NOT EXISTS layout_json JSONB;
 
 CREATE TABLE IF NOT EXISTS movies (
   id TEXT PRIMARY KEY,

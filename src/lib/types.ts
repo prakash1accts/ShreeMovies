@@ -15,12 +15,26 @@ export interface Theater {
   address: string | null;
 }
 
+export interface ScreenLayoutRow {
+  label: string;
+  // The exact seat numbers that exist in this row. Any number not listed is
+  // a real gap in the physical row (aisle, pillar, door, step, etc.).
+  seatNumbers: number[];
+}
+
+export interface ScreenLayout {
+  rows: ScreenLayoutRow[];
+}
+
 export interface Screen {
   id: string;
   theater_id: string;
   name: string;
   rows: number;
   cols: number;
+  // Present only for screens with a real, irregular seat map. Null means
+  // "use the plain rows x cols grid" (the original default behavior).
+  layout_json: ScreenLayout | null;
 }
 
 export interface Movie {
