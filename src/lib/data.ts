@@ -24,6 +24,15 @@ export async function getUserById(id: string): Promise<User | undefined> {
   return rows[0];
 }
 
+// Used to gate the one-time /setup page: once a single admin exists, that
+// page stops offering to create another one.
+export async function hasAnyAdmin(): Promise<boolean> {
+  const { rows } = await query<{ exists: boolean }>(
+    "SELECT EXISTS(SELECT 1 FROM users WHERE role = 'admin') as exists"
+  );
+  return Boolean(rows[0]?.exists);
+}
+
 export async function createUser(params: {
   name: string;
   email: string;
