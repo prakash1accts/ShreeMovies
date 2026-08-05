@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/* This app uses a fixed dark "cinema" theme regardless of the visitor's
+   system light/dark preference, so we hardcode the background/foreground
+   here instead of switching on prefers-color-scheme. */
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Homepage poster marquee — the track's content is duplicated (see
+   PosterMarquee.tsx), so animating to -50% loops seamlessly forever. */
+@keyframes poster-marquee-scroll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+.poster-marquee-track {
+  animation: poster-marquee-scroll 22s linear infinite;
+}
+
+/* Plain CSS (not a Tailwind utility) so its extra specificity reliably beats
+   the rule above, regardless of Tailwind's cascade-layer ordering — pauses
+   the loop while the visitor is pointing at a poster so it's easy to click. */
+.group:hover .poster-marquee-track {
+  animation-play-state: paused;
+}
