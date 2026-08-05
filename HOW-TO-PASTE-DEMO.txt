@@ -1,0 +1,11 @@
+HOW TO UPDATE A FILE ON GITHUB (step-by-step)
+
+1. Open the file you want to update (from the shree-movies-update.zip on your computer, open the matching file to copy its full contents).
+2. On GitHub, click the pencil (edit) icon on that file's page.
+3. Click inside the code editor, press Ctrl+A (select all), then Delete.
+4. Go back to the file open on your computer, press Ctrl+A then Ctrl+C to copy everything.
+5. Click back in the GitHub editor and press Ctrl+V to paste.
+6. Scroll up, click the green 'Commit changes...' button.
+7. In the popup, leave the default message (or type a short note) and click the green 'Commit changes' button to confirm.
+
+That's it! Repeat for each remaining file. This demo file is safe to delete afterwards.
