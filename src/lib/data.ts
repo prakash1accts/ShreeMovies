@@ -537,6 +537,84 @@ export async function createAdminBooking(params: {
   });
 }
 
+// Lets an admin re-seat an existing booking (same ticket count, different
+// seats) — e.g. the customer asked to move, or the wrong seats were picked
+// at the box office. The booking's own current seats are always eligible
+// to "keep"; any other requested seat must be genuinely available.
+export async function updateBookingSeats(
+  bookingId: string,
+  newSeatIds: string[]
+): Promise<Booking> {
+  return withTransaction(async (client) => {
+    const { rows: bookingRows } = await clientQuery<Booking>(
+      client,
+      "SELECT * FROM bookings WHERE id = $1 FOR UPDATE",
+      [bookingId]
+    );
+    const booking = bookingRows[0];
+    if (!booking) throw new Error("BOOKING_NOT_FOUND");
+
+    const { rows: oldSeatRows } = await clientQuery<{ seat_id: string }>(
+      client,
+      "SELECT seat_id FROM booking_seats WHERE booking_id = $1",
+      [bookingId]
+    );
+    const oldSeatIds = oldSeatRows.map((r) => r.seat_id);
+
+    const { rows: newSeats } = await clientQuery<Seat>(
+      client,
+      "SELECT * FROM seats WHERE id = ANY($1) AND showtime_id = $2 FOR UPDATE",
+      [newSeatIds, booking.showtime_id]
+    );
+    if (newSeats.length !== newSeatIds.length) {
+      throw new Error("SEATS_NOT_FOUND");
+    }
+    const conflicting = newSeats.filter(
+      (s) => s.status !== "available" && !oldSeatIds.includes(s.id)
+    );
+    if (conflicting.length > 0) {
+      throw new Error("SEATS_UNAVAILABLE");
+    }
+
+    // Free the old seats and detach them from this booking.
+    if (oldSeatIds.length > 0) {
+      await client.query(
+        "UPDATE seats SET status = 'available', held_at = NULL WHERE id = ANY($1)",
+        [oldSeatIds]
+      );
+    }
+    await client.query("DELETE FROM booking_seats WHERE booking_id = $1", [bookingId]);
+
+    // Attach and mark the new seats, matching this booking's current status.
+    for (const seatId of newSeatIds) {
+      await client.query(
+        "INSERT INTO booking_seats (booking_id, seat_id) VALUES ($1, $2)",
+        [bookingId, seatId]
+      );
+    }
+    if (newSeatIds.length > 0) {
+      if (booking.status === "paid") {
+        await client.query(
+          "UPDATE seats SET status = 'booked', held_at = NULL WHERE id = ANY($1)",
+          [newSeatIds]
+        );
+      } else if (booking.status === "pending") {
+        await client.query(
+          "UPDATE seats SET status = 'held', held_at = now() WHERE id = ANY($1)",
+          [newSeatIds]
+        );
+      }
+    }
+
+    const { rows } = await clientQuery<Booking>(
+      client,
+      "SELECT * FROM bookings WHERE id = $1",
+      [bookingId]
+    );
+    return rows[0];
+  });
+}
+
 export async function markBookingPaid(bookingId: string, stripeSessionId?: string) {
   await withTransaction(async (client) => {
     const { rows: seatRows } = await clientQuery<{ seat_id: string }>(
