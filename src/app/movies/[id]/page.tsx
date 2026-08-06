@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getMovie, listShowtimesForMovie } from "@/lib/data";
+import PosterImage from "@/components/PosterImage";
 
 export default async function MovieDetailPage({
   params,
@@ -29,33 +30,54 @@ export default async function MovieDetailPage({
     <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
       <div className="md:col-span-1">
         <div className="aspect-[2/3] w-full overflow-hidden rounded-lg bg-neutral-800">
-          {movie.poster_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={movie.poster_url}
-              alt={movie.title}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-neutral-600">
-              No poster
-            </div>
-          )}
+          <PosterImage
+            src={movie.poster_url}
+            alt={movie.title}
+            className="h-full w-full object-cover"
+          />
         </div>
       </div>
 
       <div className="md:col-span-2">
         <h1 className="text-3xl font-bold">{movie.title}</h1>
         <p className="mt-1 text-neutral-400">
-          {[movie.genre, movie.rating, `${movie.duration_minutes} min`]
+          {[
+            movie.duration_minutes ? `${movie.duration_minutes} min` : null,
+            movie.genre,
+            movie.rating,
+          ]
             .filter(Boolean)
             .join(" · ")}
         </p>
-        {movie.description && (
-          <p className="mt-4 leading-relaxed text-neutral-300">{movie.description}</p>
+
+        {movie.language && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="rounded-full border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs text-neutral-300">
+              {movie.language}
+            </span>
+          </div>
         )}
 
-        <h2 className="mt-8 text-xl font-semibold">Showtimes</h2>
+        {showtimes.length > 0 && (
+          
+            href="#showtimes"
+            className="mt-5 inline-block rounded-md border border-red-600 px-5 py-2 text-sm font-medium text-red-500 transition hover:bg-red-600 hover:text-white"
+          >
+            Book tickets
+          </a>
+        )}
+
+        {movie.description && (
+          <>
+            <hr className="mt-6 border-neutral-800" />
+            <h2 className="mt-6 text-lg font-semibold">About the movie</h2>
+            <p className="mt-2 leading-relaxed text-neutral-300">{movie.description}</p>
+          </>
+        )}
+
+        <h2 id="showtimes" className="mt-8 text-xl font-semibold">
+          Showtimes
+        </h2>
         {showtimes.length === 0 ? (
           <p className="mt-2 text-neutral-400">No showtimes scheduled yet.</p>
         ) : (
