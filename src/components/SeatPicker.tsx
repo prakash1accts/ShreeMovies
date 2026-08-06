@@ -84,14 +84,22 @@ export default function SeatPicker({
                       type="button"
                       disabled={isTaken}
                       onClick={() => toggleSeat(seat)}
-                      title={`${rowLabel}${seat.col_number}`}
+                      title={`${rowLabel}${seat.col_number}${
+                        seat.status === "held"
+                          ? " — held, payment pending"
+                          : seat.status === "booked"
+                          ? " — booked"
+                          : ""
+                      }`}
                       style={{ gridColumnStart: seat.col_number }}
                       className={[
                         "h-6 w-6 rounded-t-md text-[9px] font-medium leading-6 transition",
-                        isTaken
-                          ? "cursor-not-allowed bg-neutral-800 text-neutral-700"
+                        seat.status === "booked"
+                          ? "cursor-not-allowed bg-red-900 text-red-200"
+                          : seat.status === "held"
+                          ? "cursor-not-allowed bg-green-800 text-green-200"
                           : isSelected
-                          ? "bg-red-600 text-white"
+                          ? "bg-blue-600 text-white"
                           : "bg-neutral-700 text-neutral-300 hover:bg-neutral-600",
                       ].join(" ")}
                     >
@@ -110,10 +118,13 @@ export default function SeatPicker({
           <span className="h-3 w-3 rounded bg-neutral-700" /> Available
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded bg-red-600" /> Selected
+          <span className="h-3 w-3 rounded bg-blue-600" /> Your selection
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded bg-neutral-800" /> Taken
+          <span className="h-3 w-3 rounded bg-green-800" /> Held (payment pending)
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="h-3 w-3 rounded bg-red-900" /> Booked
         </span>
       </div>
 
