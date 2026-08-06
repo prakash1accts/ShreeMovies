@@ -60,6 +60,17 @@ export async function getMovie(id: string): Promise<Movie | undefined> {
   return rows[0];
 }
 
+export async function listMoviesByLanguage(
+  language: string,
+  limit = 5
+): Promise<Movie[]> {
+  const { rows } = await query<Movie>(
+    "SELECT * FROM movies WHERE language = $1 ORDER BY created_at DESC LIMIT $2",
+    [language, limit]
+  );
+  return rows;
+}
+
 export async function createMovie(params: {
   title: string;
   description?: string;
@@ -67,11 +78,12 @@ export async function createMovie(params: {
   durationMinutes?: number;
   genre?: string;
   rating?: string;
+  language?: string;
 }): Promise<Movie> {
   const id = genId("mov");
   const { rows } = await query<Movie>(
-    `INSERT INTO movies (id, title, description, poster_url, duration_minutes, genre, rating)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    `INSERT INTO movies (id, title, description, poster_url, duration_minutes, genre, rating, language)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
     [
       id,
       params.title,
@@ -80,6 +92,39 @@ export async function createMovie(params: {
       params.durationMinutes ?? 120,
       params.genre ?? null,
       params.rating ?? null,
+      params.language ?? null,
+    ]
+  );
+  return rows[0];
+}
+
+export async function updateMovie(
+  id: string,
+  params: {
+    title: string;
+    description?: string;
+    posterUrl?: string;
+    durationMinutes?: number;
+    genre?: string;
+    rating?: string;
+    language?: string;
+  }
+): Promise<Movie> {
+  const { rows } = await query<Movie>(
+    `UPDATE movies
+     SET title = $1, description = $2, poster_url = $3,
+         duration_minutes = $4, genre = $5, rating = $6, language = $8
+     WHERE id = $7
+     RETURNING *`,
+    [
+      params.title,
+      params.description ?? null,
+      params.posterUrl ?? null,
+      params.durationMinutes ?? 120,
+      params.genre ?? null,
+      params.rating ?? null,
+      id,
+      params.language ?? null,
     ]
   );
   return rows[0];
@@ -191,6 +236,16 @@ export async function listAllShowtimes(): Promise<ShowtimeWithMovie[]> {
   return rows;
 }
 
+// Only showtimes that haven't started yet — used for the admin "new
+// booking" screen so staff aren't selling tickets for a show that already
+// happened.
+export async function listUpcomingShowtimes(): Promise<ShowtimeWithMovie[]> {
+  const { rows } = await query<ShowtimeWithMovie>(
+    `${SHOWTIME_SELECT} ${SHOWTIME_JOIN} WHERE st.starts_at >= now() ORDER BY st.starts_at ASC`
+  );
+  return rows;
+}
+
 export async function getShowtime(id: string): Promise<ShowtimeWithMovie | undefined> {
   const { rows } = await query<ShowtimeWithMovie>(
     `${SHOWTIME_SELECT} ${SHOWTIME_JOIN} WHERE st.id = $1`,
@@ -283,6 +338,73 @@ export async function getSeatsByIds(seatIds: string[]): Promise<Seat[]> {
   return rows;
 }
 
+// Groups a row's available seats into contiguous runs (consecutive seat
+// numbers, no gaps). A gap in the run means an aisle/pillar/missing seat —
+// seats on either side are NOT considered adjacent.
+function contiguousRuns(rowSeats: Seat[]): Seat[][] {
+  const sorted = [...rowSeats].sort((a, b) => a.col_number - b.col_number);
+  const runs: Seat[][] = [];
+  let current: Seat[] = [];
+  for (const seat of sorted) {
+    const prev = current[current.length - 1];
+    if (!prev || seat.col_number === prev.col_number + 1) {
+      current.push(seat);
+    } else {
+      runs.push(current);
+      current = [seat];
+    }
+  }
+  if (current.length) runs.push(current);
+  return runs;
+}
+
+// Automatically picks `quantity` seats for a booking, trying hard to seat
+// the whole party together instead of scattering them:
+//   1. Prefer a single row with one contiguous block big enough for the
+//      whole group (starting from the back/top row, same order the seat
+//      map is displayed in).
+//   2. If no single row has enough room, fall back to combining the
+//      biggest contiguous blocks available (across rows) so the group
+//      stays in as few, as-large-as-possible clusters as the house allows.
+// Returns null if there simply aren't enough available seats at all.
+export async function autoAllocateSeats(
+  showtimeId: string,
+  quantity: number
+): Promise<Seat[] | null> {
+  await releaseStaleHolds(showtimeId);
+  const { rows: seats } = await query<Seat>(
+    "SELECT * FROM seats WHERE showtime_id = $1 AND status = 'available' ORDER BY row_label ASC, col_number ASC",
+    [showtimeId]
+  );
+  if (quantity <= 0 || seats.length < quantity) return null;
+
+  const byRow = new Map<string, Seat[]>();
+  for (const seat of seats) {
+    if (!byRow.has(seat.row_label)) byRow.set(seat.row_label, []);
+    byRow.get(seat.row_label)!.push(seat);
+  }
+  // Back row at the top, front row at the bottom — matches the seat map
+  // display used everywhere else in the app.
+  const rowLabels = Array.from(byRow.keys()).sort((a, b) => b.localeCompare(a));
+
+  for (const label of rowLabels) {
+    const fit = contiguousRuns(byRow.get(label)!).find((run) => run.length >= quantity);
+    if (fit) return fit.slice(0, quantity);
+  }
+
+  const allRuns = rowLabels
+    .flatMap((label) => contiguousRuns(byRow.get(label)!))
+    .sort((a, b) => b.length - a.length);
+
+  const picked: Seat[] = [];
+  for (const run of allRuns) {
+    if (picked.length >= quantity) break;
+    picked.push(...run.slice(0, quantity - picked.length));
+  }
+
+  return picked.length >= quantity ? picked : null;
+}
+
 // Always called from within withTransaction(), so it takes the transaction's
 // client directly rather than going through the module-level query() helper.
 async function setSeatsStatus(
@@ -349,6 +471,67 @@ export async function createPendingBooking(params: {
     }
 
     await setSeatsStatus(params.seatIds, "held", client);
+
+    return rows[0];
+  });
+}
+
+// Admin-entered walk-in / phone booking (box-office sale). Skips the
+// online 'pending' → payment step and books straight to 'paid', since the
+// admin is recording a sale that already happened (cash in hand, or a
+// deposit already taken).
+export async function createAdminBooking(params: {
+  showtimeId: string;
+  seatIds: string[];
+  customerName: string;
+  unitPriceCents: number;
+  totalCents: number;
+  paymentTerms: "cash" | "deposit";
+  depositReference?: string;
+  depositDate?: string;
+}): Promise<Booking> {
+  const id = genId("bkg");
+
+  return withTransaction(async (client) => {
+    const { rows: seats } = await clientQuery<Seat>(
+      client,
+      "SELECT * FROM seats WHERE id = ANY($1) AND showtime_id = $2 FOR UPDATE",
+      [params.seatIds, params.showtimeId]
+    );
+    if (seats.length !== params.seatIds.length) {
+      throw new Error("SEATS_NOT_FOUND");
+    }
+    if (seats.some((s) => s.status !== "available")) {
+      throw new Error("SEATS_UNAVAILABLE");
+    }
+
+    const { rows } = await clientQuery<Booking>(
+      client,
+      `INSERT INTO bookings
+         (id, user_id, showtime_id, status, total_cents, customer_name,
+          unit_price_cents, payment_terms, deposit_reference, deposit_date, created_by_admin)
+       VALUES ($1, NULL, $2, 'paid', $3, $4, $5, $6, $7, $8, true)
+       RETURNING *`,
+      [
+        id,
+        params.showtimeId,
+        params.totalCents,
+        params.customerName,
+        params.unitPriceCents,
+        params.paymentTerms,
+        params.depositReference ?? null,
+        params.depositDate ?? null,
+      ]
+    );
+
+    for (const seatId of params.seatIds) {
+      await client.query(
+        "INSERT INTO booking_seats (booking_id, seat_id) VALUES ($1, $2)",
+        [id, seatId]
+      );
+    }
+
+    await setSeatsStatus(params.seatIds, "booked", client);
 
     return rows[0];
   });
