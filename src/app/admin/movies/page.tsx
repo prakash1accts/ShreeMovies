@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { deleteMovieAction } from "@/app/actions/admin";
 import { listMovies } from "@/lib/data";
 import AdminMovieForm from "@/components/AdminMovieForm";
@@ -27,12 +28,20 @@ export default async function AdminMoviesPage() {
                   .join(" · ")}
               </div>
             </div>
-            <form action={deleteMovieAction}>
-              <input type="hidden" name="id" value={movie.id} />
-              <button className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-red-900 hover:text-red-300">
-                Delete
-              </button>
-            </form>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/admin/movies/${movie.id}/edit`}
+                className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-700"
+              >
+                Edit
+              </Link>
+              <form action={deleteMovieAction}>
+                <input type="hidden" name="id" value={movie.id} />
+                <button className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-red-900 hover:text-red-300">
+                  Delete
+                </button>
+              </form>
+            </div>
           </div>
         ))}
       </div>
