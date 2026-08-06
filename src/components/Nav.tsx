@@ -4,7 +4,7 @@ import { logoutAction } from "@/app/actions/auth";
 
 export default function Nav({ session }: { session: SessionUser | null }) {
   return (
-    <header className="border-b border-neutral-800">
+    <header className="border-b border-neutral-800 print:hidden">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
         <Link href="/" className="text-lg font-semibold tracking-tight">
           🎬 Shree Movies
