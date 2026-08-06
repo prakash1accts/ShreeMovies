@@ -18,7 +18,7 @@ export default async function RootLayout({
       <body className="min-h-screen bg-neutral-950 text-neutral-100 antialiased">
         <Nav session={session} />
         <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
-        <footer className="mx-auto max-w-6xl px-4 py-10 text-sm text-neutral-500">
+        <footer className="mx-auto max-w-6xl px-4 py-10 text-sm text-neutral-500 print:hidden">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span>Shree Movies — book your show online.</span>
             <Link href="/contact" className="hover:text-neutral-300">
