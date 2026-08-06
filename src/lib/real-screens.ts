@@ -60,17 +60,18 @@ const screen6: ScreenLayout = {
 };
 
 // ---------- Screen 7 ----------
-// 7 rows (B front -> G back); row A has no bookable seats in the photo.
+// 7 rows (A front, closest to screen -> G back).
 // Row F has a gap at seat 18 (obstruction). Row C is a short row with only
-// a few seats (8, 12-14, 17-22) between long aisle sections.
+// a few seats (8, 12-14) between long aisle sections.
 const screen7: ScreenLayout = {
   rows: [
-    { label: "B", seatNumbers: range(3, 22) },
-    { label: "C", seatNumbers: [8, 12, 13, 14, 17, 18, 19, 20, 21, 22] },
+    { label: "A", seatNumbers: range(1, 21) },
+    { label: "B", seatNumbers: range(1, 22) },
+    { label: "C", seatNumbers: [8, 12, 13, 14] },
     { label: "D", seatNumbers: range(3, 19) },
     { label: "E", seatNumbers: range(3, 19) },
     { label: "F", seatNumbers: [...range(3, 17), 19] },
-    { label: "G", seatNumbers: range(1, 21) },
+    { label: "G", seatNumbers: [...range(1, 21), 22] },
   ],
 };
 
