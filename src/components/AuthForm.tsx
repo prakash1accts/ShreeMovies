@@ -25,7 +25,7 @@ export default function AuthForm({
       </h1>
       <p className="mt-1 text-sm text-neutral-400">
         {mode === "login"
-          ? "Welcome back to Main Street Cinema."
+          ? "Welcome back to Shree Movies."
           : mode === "setup"
           ? "This is a one-time setup step — this page stops working once an admin account exists."
           : "Sign up to book tickets online."}
