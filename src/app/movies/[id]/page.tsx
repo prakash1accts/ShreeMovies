@@ -60,7 +60,7 @@ export default async function MovieDetailPage({
 
         {showtimes.length > 0 && (
           
-            href="#showtimes"
+            <ahref="#showtimes"
             className="mt-5 inline-block rounded-md border border-red-600 px-5 py-2 text-sm font-medium text-red-500 transition hover:bg-red-600 hover:text-white"
           >
             Book tickets
