@@ -36,6 +36,11 @@ export default async function AccountPage() {
                 <div className="text-sm text-neutral-500">
                   Seats: {b.seat_labels || "—"}
                 </div>
+                {b.status === "pending" && (
+                  <div className="mt-1 text-xs text-yellow-400">
+                    Not final yet — awaiting payment confirmation from the theatre.
+                  </div>
+                )}
               </div>
               <div className="text-right">
                 <div className="font-medium">${(b.total_cents / 100).toFixed(2)}</div>
