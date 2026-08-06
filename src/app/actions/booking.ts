@@ -8,7 +8,6 @@ import {
   createPendingBooking,
   getSeatsByIds,
   getShowtime,
-  markBookingPaid,
 } from "@/lib/data";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 
@@ -59,10 +58,11 @@ export async function bookSeatsAction(
     `${hdrs.get("x-forwarded-proto") || "http"}://${hdrs.get("host")}`;
 
   if (!stripe || !isStripeConfigured()) {
-    // No Stripe keys configured yet: skip real payment so the app is fully
-    // demo-able out of the box. Booking is marked paid immediately.
-    await markBookingPaid(booking.id);
-    redirect(`/booking/success?booking=${booking.id}&demo=1`);
+    // No payment gateway connected yet: the booking stays 'pending' and the
+    // seats stay 'held' — NOT a final booking. An admin confirms the
+    // payment manually (once received in person / by transfer) from the
+    // admin Bookings page, which is what finalizes it to 'paid'.
+    redirect(`/booking/success?booking=${booking.id}&pending=1`);
   }
 
   const checkoutSession = await stripe.checkout.sessions.create({
