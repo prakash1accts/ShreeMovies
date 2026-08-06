@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import {
   autoAllocateSeats,
+  cancelBooking,
   createAdminBooking,
   createMovie,
   createScreen,
@@ -14,6 +15,8 @@ import {
   deleteShowtime,
   listScreens,
   listTheaters,
+  markBookingPaid,
+  updateBookingSeats,
   updateMovie,
   updateScreenLayout,
 } from "@/lib/data";
@@ -266,38 +269,3 @@ export async function createAdminBookingAction(
     }
     seatIds = seats.map((s) => s.id);
   } else {
-    if (manualSeatIds.length === 0) {
-      return { error: "Please select seats on the seat map." };
-    }
-    if (manualSeatIds.length !== ticketCount) {
-      return {
-        error: `Number of tickets is ${ticketCount}, but ${manualSeatIds.length} seat(s) were selected — they must match.`,
-      };
-    }
-    seatIds = manualSeatIds;
-  }
-
-  try {
-    await createAdminBooking({
-      showtimeId,
-      seatIds,
-      customerName,
-      unitPriceCents,
-      totalCents,
-      paymentTerms,
-      depositReference: paymentTerms === "deposit" ? depositReference : undefined,
-      depositDate: paymentTerms === "deposit" ? depositDate : undefined,
-    });
-  } catch (err) {
-    if (err instanceof Error && err.message === "SEATS_UNAVAILABLE") {
-      return {
-        error: "One or more selected seats were just booked by someone else. Please pick again.",
-      };
-    }
-    return { error: "Could not create the booking. Please try again." };
-  }
-
-  revalidatePath("/admin/bookings");
-  revalidatePath("/");
-  redirect("/admin/bookings");
-}
