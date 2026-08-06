@@ -125,14 +125,14 @@ export default function TicketButton({ booking }: { booking: BookingWithDetails 
               {imageUrl && (
                 
                   href={imageUrl}
-                  download={`ticket-${booking.id}.png`}
+                 <a download={`ticket-${booking.id}.png`}
                   className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
                 >
                   Download image
                 </a>
               )}
               
-                href={`https://wa.me/?text=${encodeURIComponent(shareText)}`}
+               <a href={`https://wa.me/?text=${encodeURIComponent(shareText)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded-md bg-green-700 px-3 py-1.5 text-sm text-white hover:bg-green-600"
@@ -140,7 +140,7 @@ export default function TicketButton({ booking }: { booking: BookingWithDetails 
                 Share via WhatsApp
               </a>
               
-                href={`mailto:?subject=${encodeURIComponent(
+                <a href={`mailto:?subject=${encodeURIComponent(
                   "Your Shree Movies ticket"
                 )}&body=${encodeURIComponent(shareText)}`}
                 className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-200 hover:bg-neutral-700"
