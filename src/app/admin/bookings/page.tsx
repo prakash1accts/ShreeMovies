@@ -104,3 +104,49 @@ export default async function AdminBookingsPage() {
                 <td className="px-4 py-3">
                   <span
                     className={[
+                      "rounded-full px-2 py-0.5 text-xs",
+                      b.status === "paid"
+                        ? "bg-green-900 text-green-300"
+                        : b.status === "cancelled"
+                        ? "bg-neutral-800 text-neutral-400"
+                        : "bg-yellow-900 text-yellow-300",
+                    ].join(" ")}
+                  >
+                    {b.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-neutral-500">
+                  {new Date(b.created_at).toLocaleString()}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {b.status !== "cancelled" && (
+                      <Link
+                        href={`/admin/bookings/${b.id}/edit`}
+                        className="rounded-md bg-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
+                      >
+                        Edit
+                      </Link>
+                    )}
+                    {b.status !== "cancelled" && (
+                      <form action={cancelBookingAction}>
+                        <input type="hidden" name="id" value={b.id} />
+                        <button className="rounded-md bg-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:bg-red-900 hover:text-red-300">
+                          Cancel
+                        </button>
+                      </form>
+                    )}
+                    {b.status === "paid" && <TicketButton booking={b} />}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {bookings.length === 0 && (
+          <div className="p-6 text-center text-neutral-400">No bookings yet.</div>
+        )}
+      </div>
+    </div>
+  );
+}
