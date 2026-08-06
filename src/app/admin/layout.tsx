@@ -13,7 +13,7 @@ export default async function AdminLayout({
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap gap-2 border-b border-neutral-800 pb-4">
+      <div className="mb-6 flex flex-wrap gap-2 border-b border-neutral-800 pb-4 print:hidden">
         <Link
           href="/admin"
           className="rounded-md px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
@@ -43,6 +43,12 @@ export default async function AdminLayout({
           className="rounded-md px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
         >
           Bookings
+        </Link>
+        <Link
+          href="/admin/reports"
+          className="rounded-md px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
+        >
+          Reports
         </Link>
       </div>
       {children}
