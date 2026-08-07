@@ -108,7 +108,7 @@ export default async function BookingSuccessPage({
         <p className="mt-4 text-neutral-400">We couldn&apos;t find that booking.</p>
       )}
       <Link
-        href="/account"
+       <a href="/account"
         className="mt-6 inline-block rounded-md bg-red-600 px-4 py-2 font-medium text-white hover:bg-red-500"
       >
         View my bookings
