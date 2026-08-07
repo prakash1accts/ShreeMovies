@@ -1,10 +1,15 @@
-import { createGridScreenAction, loadRealScreensAction } from "@/app/actions/admin";
+import { createGridScreenAction, deleteScreenAction, loadRealScreensAction } from "@/app/actions/admin";
 import { listScreens, listTheaters } from "@/lib/data";
 import GridScreenForm from "@/components/GridScreenForm";
 import LoadRealScreensButton from "@/components/LoadRealScreensButton";
 import { REAL_SCREENS } from "@/lib/real-screens";
 
-export default async function AdminScreensPage() {
+export default async function AdminScreensPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
   const theaters = await listTheaters();
   const theaterId = theaters[0]?.id;
   const screens = theaterId ? await listScreens(theaterId) : [];
@@ -17,10 +22,18 @@ export default async function AdminScreensPage() {
         Each screen&apos;s seat map is used whenever you schedule a showtime on it.
       </p>
 
+      {error && (
+        <div className="mt-4 rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
+
       <div className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-        <h2 className="font-medium">Real seat maps: Screen 4, Screen 6, Screen 7</h2>
+        <h2 className="font-medium">
+          Real seat maps: {REAL_SCREENS.map((s) => s.name).join(", ")}
+        </h2>
         <p className="mt-1 text-sm text-neutral-400">
-          These three use your actual box-office seat charts (real aisles, gaps, and
+          These use your actual box-office seat charts (real aisles, gaps, and
           row lengths) instead of a plain grid. Click below to create them, or to
           refresh them if you&apos;ve sent me an updated photo.
         </p>
@@ -67,6 +80,12 @@ export default async function AdminScreensPage() {
                     : `${s.rows} rows × ${s.cols} seats = ${seatCount} seats (grid)`}
                 </div>
               </div>
+              <form action={deleteScreenAction}>
+                <input type="hidden" name="id" value={s.id} />
+                <button className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-red-900 hover:text-red-300">
+                  Remove
+                </button>
+              </form>
             </div>
           );
         })}
