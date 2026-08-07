@@ -23,7 +23,7 @@ export default async function RootLayout({
             <span>Shree Movies — book your show online.</span>
             <div className="flex items-center gap-4">
               
-                href="https://www.instagram.com/shree_indianmovies?igsh=MXB0emhibng1OXk1dQ=="
+                <a href="https://www.instagram.com/shree_indianmovies?igsh=MXB0emhibng1OXk1dQ=="
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-neutral-300"
@@ -31,7 +31,7 @@ export default async function RootLayout({
                 Instagram
               </a>
               
-                href="https://www.facebook.com/profile.php?id=100095605175114&mibextid=wwXIfr&mibextid=wwXIfr"
+                <a href="https://www.facebook.com/profile.php?id=100095605175114&mibextid=wwXIfr&mibextid=wwXIfr"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-neutral-300"
