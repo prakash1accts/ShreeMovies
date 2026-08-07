@@ -366,3 +366,92 @@ export async function createAdminBookingAction(
     await createAdminBooking({
       showtimeId,
       seatIds,
+      customerName,
+      unitPriceCents,
+      totalCents,
+      paymentTerms,
+      depositReference: paymentTerms === "deposit" ? depositReference : undefined,
+      depositDate: paymentTerms === "deposit" ? depositDate : undefined,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "SEATS_UNAVAILABLE") {
+      return {
+        error: "One or more selected seats were just booked by someone else. Please pick again.",
+      };
+    }
+    return { error: "Could not create the booking. Please try again." };
+  }
+
+  revalidatePath("/admin/bookings");
+  revalidatePath("/");
+  redirect("/admin/bookings");
+}
+
+// Called from the admin "Pending Payment Confirmation" list once the admin
+// has verified (in person / by phone / by bank transfer) that a customer's
+// online booking was actually paid for — this is what finalizes a 'pending'
+// booking to 'paid' and locks in the held seats as 'booked'.
+export async function confirmBookingPaymentAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  const depositReference = String(formData.get("depositReference") || "").trim();
+  const depositDate = String(formData.get("depositDate") || "").trim();
+  const proofFile = formData.get("paymentProof");
+
+  let paymentProofUrl: string | undefined;
+  if (proofFile instanceof File && proofFile.size > 0) {
+    const buf = Buffer.from(await proofFile.arrayBuffer());
+    paymentProofUrl = `data:${proofFile.type || "application/octet-stream"};base64,${buf.toString(
+      "base64"
+    )}`;
+  }
+
+  if (id) {
+    await markBookingPaid(id, {
+      depositReference: depositReference || undefined,
+      depositDate: depositDate || undefined,
+      paymentProofUrl,
+    });
+  }
+  revalidatePath("/admin/bookings");
+  revalidatePath("/account");
+}
+
+// Cancels any booking (pending or paid) and releases its seats back to
+// 'available'. Used both for pending bookings that never got paid, and for
+// paid bookings a customer asked to cancel.
+export async function cancelBookingAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  if (id) await cancelBooking(id);
+  revalidatePath("/admin/bookings");
+  revalidatePath("/account");
+}
+
+// Re-seats an existing booking to a different set of seats (same ticket
+// count) — e.g. fixing a mis-picked seat at the box office.
+export async function editBookingSeatsAction(
+  _prevState: { error?: string } | undefined,
+  formData: FormData
+) {
+  await requireAdmin();
+
+  const bookingId = String(formData.get("bookingId") || "");
+  const seatIds = formData.getAll("seatIds").map(String);
+
+  if (!bookingId) return { error: "Missing booking id." };
+  if (seatIds.length === 0) return { error: "Please select seats." };
+
+  try {
+    await updateBookingSeats(bookingId, seatIds);
+  } catch (err) {
+    if (err instanceof Error && err.message === "SEATS_UNAVAILABLE") {
+      return { error: "One or more selected seats are already taken. Please pick again." };
+    }
+    return { error: "Could not update seats. Please try again." };
+  }
+
+  revalidatePath("/admin/bookings");
+  revalidatePath("/account");
+  redirect("/admin/bookings");
+}
