@@ -2,12 +2,14 @@ import { clientQuery, genId, query, withTransaction } from "./db";
 import type {
   Booking,
   Movie,
+  MovieVoteCounts,
   Screen,
   ScreenLayout,
   Seat,
   Showtime,
   Theater,
   User,
+  VoteValue,
 } from "./types";
 
 // ---------- Users ----------
@@ -38,12 +40,22 @@ export async function createUser(params: {
   email: string;
   passwordHash: string;
   role?: "customer" | "admin";
+  phone?: string;
+  whatsapp?: string;
 }): Promise<User> {
   const id = genId("usr");
   const { rows } = await query<User>(
-    `INSERT INTO users (id, name, email, password_hash, role)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [id, params.name, params.email.toLowerCase().trim(), params.passwordHash, params.role ?? "customer"]
+    `INSERT INTO users (id, name, email, password_hash, role, phone, whatsapp)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [
+      id,
+      params.name,
+      params.email.toLowerCase().trim(),
+      params.passwordHash,
+      params.role ?? "customer",
+      params.phone?.trim() || null,
+      params.whatsapp?.trim() || null,
+    ]
   );
   return rows[0];
 }
@@ -189,6 +201,20 @@ export async function createScreen(params: {
   return rows[0];
 }
 
+// Removes a screen, but only if no showtimes have ever been scheduled on it —
+// otherwise this would silently cascade-delete those showtimes (and any
+// bookings/tickets tied to them). Used to clean up placeholder screens.
+export async function deleteScreen(id: string): Promise<void> {
+  const { rows } = await query<{ count: string }>(
+    "SELECT COUNT(*) as count FROM showtimes WHERE screen_id = $1",
+    [id]
+  );
+  if (Number(rows[0]?.count ?? 0) > 0) {
+    throw new Error("SCREEN_HAS_SHOWTIMES");
+  }
+  await query("DELETE FROM screens WHERE id = $1", [id]);
+}
+
 // Updates an existing screen's real seat map in place (used when re-loading
 // the theater's official layouts — safe to run repeatedly since it matches
 // by screen id, not by inserting a new row).
@@ -254,6 +280,38 @@ export async function getShowtime(id: string): Promise<ShowtimeWithMovie | undef
   return rows[0];
 }
 
+// Shared by createShowtime, resyncShowtimeSeats, and updateShowtime — inserts
+// one 'available' seat row per seat that actually exists on `screen`,
+// whether that's a real (irregular) layout or a plain rows×cols grid.
+async function insertSeatsForShowtime(
+  client: import("pg").PoolClient,
+  showtimeId: string,
+  screen: Screen
+) {
+  if (screen.layout_json) {
+    // Real seat map: only create the seats that actually exist, in their
+    // real rows/numbers — gaps (aisles, pillars, doors) are simply absent.
+    for (const row of screen.layout_json.rows) {
+      for (const seatNumber of row.seatNumbers) {
+        await client.query(
+          "INSERT INTO seats (id, showtime_id, row_label, col_number, status) VALUES ($1, $2, $3, $4, 'available')",
+          [genId("seat"), showtimeId, row.label, seatNumber]
+        );
+      }
+    }
+  } else {
+    for (let r = 0; r < screen.rows; r++) {
+      const rowLabel = String.fromCharCode(65 + r); // A, B, C...
+      for (let c = 1; c <= screen.cols; c++) {
+        await client.query(
+          "INSERT INTO seats (id, showtime_id, row_label, col_number, status) VALUES ($1, $2, $3, $4, 'available')",
+          [genId("seat"), showtimeId, rowLabel, c]
+        );
+      }
+    }
+  }
+}
+
 export async function createShowtime(params: {
   movieId: string;
   screenId: string;
@@ -276,28 +334,7 @@ export async function createShowtime(params: {
       [params.screenId]
     );
     const screen = screenRows[0];
-    if (screen?.layout_json) {
-      // Real seat map: only create the seats that actually exist, in their
-      // real rows/numbers — gaps (aisles, pillars, doors) are simply absent.
-      for (const row of screen.layout_json.rows) {
-        for (const seatNumber of row.seatNumbers) {
-          await client.query(
-            "INSERT INTO seats (id, showtime_id, row_label, col_number, status) VALUES ($1, $2, $3, $4, 'available')",
-            [genId("seat"), id, row.label, seatNumber]
-          );
-        }
-      }
-    } else if (screen) {
-      for (let r = 0; r < screen.rows; r++) {
-        const rowLabel = String.fromCharCode(65 + r); // A, B, C...
-        for (let c = 1; c <= screen.cols; c++) {
-          await client.query(
-            "INSERT INTO seats (id, showtime_id, row_label, col_number, status) VALUES ($1, $2, $3, $4, 'available')",
-            [genId("seat"), id, rowLabel, c]
-          );
-        }
-      }
-    }
+    if (screen) await insertSeatsForShowtime(client, id, screen);
 
     return rows[0];
   });
@@ -305,6 +342,142 @@ export async function createShowtime(params: {
 
 export async function deleteShowtime(id: string) {
   await query("DELETE FROM showtimes WHERE id = $1", [id]);
+}
+
+// Updates a showtime's movie, screen, start time, and/or price. Changing the
+// screen means the existing seat grid (rows/labels) may no longer make sense
+// for the new screen, so when the screen actually changes, this regenerates
+// the seat grid from the new screen's current layout — but only when every
+// existing seat is still 'available'. If any are held or booked, the screen
+// change is refused (movie/time/price changes still are not applied either,
+// so the caller gets an all-or-nothing result and can decide how to proceed,
+// e.g. cancelling those bookings first or creating a new showtime instead).
+export async function updateShowtime(params: {
+  id: string;
+  movieId: string;
+  screenId: string;
+  startsAt: string;
+  priceCents: number;
+}): Promise<{ error?: string }> {
+  return withTransaction(async (client) => {
+    const { rows: existingRows } = await clientQuery<Showtime>(
+      client,
+      "SELECT * FROM showtimes WHERE id = $1",
+      [params.id]
+    );
+    const existing = existingRows[0];
+    if (!existing) return { error: "Showtime not found." };
+
+    const screenChanged = existing.screen_id !== params.screenId;
+
+    if (screenChanged) {
+      const { rows: seatRows } = await clientQuery<{ status: string }>(
+        client,
+        "SELECT status FROM seats WHERE showtime_id = $1",
+        [params.id]
+      );
+      const bookedOrHeld = seatRows.filter((s) => s.status !== "available").length;
+      if (bookedOrHeld > 0) {
+        return {
+          error: `Can't change the screen — ${bookedOrHeld} seat(s) are already booked or held for this showtime. Cancel or edit those bookings first, or create a new showtime on the other screen instead.`,
+        };
+      }
+    }
+
+    await clientQuery(
+      client,
+      "UPDATE showtimes SET movie_id = $1, screen_id = $2, starts_at = $3, price_cents = $4 WHERE id = $5",
+      [params.movieId, params.screenId, params.startsAt, params.priceCents, params.id]
+    );
+
+    if (screenChanged) {
+      const { rows: screenRows } = await clientQuery<Screen>(
+        client,
+        "SELECT * FROM screens WHERE id = $1",
+        [params.screenId]
+      );
+      const screen = screenRows[0];
+      if (!screen) return { error: "Selected screen not found." };
+
+      await client.query("DELETE FROM seats WHERE showtime_id = $1", [params.id]);
+      await insertSeatsForShowtime(client, params.id, screen);
+    }
+
+    return {};
+  });
+}
+
+// A showtime's seats are a snapshot of its screen's layout at the moment the
+// showtime was created (see createShowtime above). If the screen's layout is
+// edited afterward (e.g. via "Load Real Screens"), existing showtimes on
+// that screen keep their old seat grid until someone resyncs them. This
+// checks whether a showtime's seats still match the screen's *current*
+// layout, and how many seats are booked/held (resyncing would wipe those).
+export async function getShowtimeSeatSyncStatus(
+  showtimeId: string,
+  screen: Screen
+): Promise<{ inSync: boolean; bookedOrHeldCount: number }> {
+  const { rows: seats } = await query<{
+    row_label: string;
+    col_number: number;
+    status: string;
+  }>("SELECT row_label, col_number, status FROM seats WHERE showtime_id = $1", [showtimeId]);
+
+  const bookedOrHeldCount = seats.filter((s) => s.status !== "available").length;
+
+  const expected = new Set<string>();
+  if (screen.layout_json) {
+    for (const row of screen.layout_json.rows) {
+      for (const seatNumber of row.seatNumbers) expected.add(`${row.label}:${seatNumber}`);
+    }
+  } else {
+    for (let r = 0; r < screen.rows; r++) {
+      const rowLabel = String.fromCharCode(65 + r);
+      for (let c = 1; c <= screen.cols; c++) expected.add(`${rowLabel}:${c}`);
+    }
+  }
+
+  const actual = new Set(seats.map((s) => `${s.row_label}:${s.col_number}`));
+  const inSync =
+    expected.size === actual.size && [...expected].every((key) => actual.has(key));
+
+  return { inSync, bookedOrHeldCount };
+}
+
+// Regenerates a showtime's seats from its screen's *current* layout. Only
+// allowed when every seat is still 'available' — if any are held or booked,
+// this throws rather than silently destroying real bookings, so the caller
+// should check getShowtimeSeatSyncStatus().bookedOrHeldCount === 0 first.
+export async function resyncShowtimeSeats(showtimeId: string): Promise<void> {
+  await withTransaction(async (client) => {
+    const { rows: seatRows } = await clientQuery<{ status: string }>(
+      client,
+      "SELECT status FROM seats WHERE showtime_id = $1",
+      [showtimeId]
+    );
+    if (seatRows.some((s) => s.status !== "available")) {
+      throw new Error("Cannot resync: this showtime already has held or booked seats.");
+    }
+
+    const { rows: stRows } = await clientQuery<Showtime>(
+      client,
+      "SELECT * FROM showtimes WHERE id = $1",
+      [showtimeId]
+    );
+    const showtime = stRows[0];
+    if (!showtime) throw new Error("Showtime not found.");
+
+    const { rows: screenRows } = await clientQuery<Screen>(
+      client,
+      "SELECT * FROM screens WHERE id = $1",
+      [showtime.screen_id]
+    );
+    const screen = screenRows[0];
+    if (!screen) throw new Error("Screen not found.");
+
+    await client.query("DELETE FROM seats WHERE showtime_id = $1", [showtimeId]);
+    await insertSeatsForShowtime(client, showtimeId, screen);
+  });
 }
 
 // ---------- Seats ----------
@@ -432,6 +605,10 @@ export interface BookingWithDetails extends Booking {
   movie_title: string;
   starts_at: string;
   seat_labels: string;
+  // Only set when the booking belongs to a registered (online) account —
+  // null for admin-entered walk-in bookings, which use customer_name instead.
+  account_phone: string | null;
+  account_whatsapp: string | null;
 }
 
 export async function createPendingBooking(params: {
@@ -505,12 +682,33 @@ export async function createAdminBooking(params: {
       throw new Error("SEATS_UNAVAILABLE");
     }
 
+    // Walk-in bookings are already paid at creation time (no separate
+    // confirm-payment step), so hand out their booking number right away.
+    let bookingNumber: string | null = null;
+    const { rows: showtimeRows } = await clientQuery<{ starts_at: string; title: string }>(
+      client,
+      "SELECT st.starts_at, m.title FROM showtimes st JOIN movies m ON m.id = st.movie_id WHERE st.id = $1",
+      [params.showtimeId]
+    );
+    const showtime = showtimeRows[0];
+    if (showtime) {
+      const { rows: seqRows } = await clientQuery<{ next_seq: number }>(
+        client,
+        `INSERT INTO showtime_booking_counters (showtime_id, next_seq) VALUES ($1, 1)
+         ON CONFLICT (showtime_id) DO UPDATE SET next_seq = showtime_booking_counters.next_seq + 1
+         RETURNING next_seq`,
+        [params.showtimeId]
+      );
+      bookingNumber = computeBookingNumber(showtime.title, showtime.starts_at, seqRows[0].next_seq);
+    }
+
     const { rows } = await clientQuery<Booking>(
       client,
       `INSERT INTO bookings
          (id, user_id, showtime_id, status, total_cents, customer_name,
-          unit_price_cents, payment_terms, deposit_reference, deposit_date, created_by_admin)
-       VALUES ($1, NULL, $2, 'paid', $3, $4, $5, $6, $7, $8, true)
+          unit_price_cents, payment_terms, deposit_reference, deposit_date, created_by_admin,
+          booking_number)
+       VALUES ($1, NULL, $2, 'paid', $3, $4, $5, $6, $7, $8, true, $9)
        RETURNING *`,
       [
         id,
@@ -521,6 +719,7 @@ export async function createAdminBooking(params: {
         params.paymentTerms,
         params.depositReference ?? null,
         params.depositDate ?? null,
+        bookingNumber,
       ]
     );
 
@@ -554,12 +753,16 @@ export async function updateBookingSeats(
     const booking = bookingRows[0];
     if (!booking) throw new Error("BOOKING_NOT_FOUND");
 
-    const { rows: oldSeatRows } = await clientQuery<{ seat_id: string }>(
+    const { rows: oldSeatDetails } = await clientQuery<Seat>(
       client,
-      "SELECT seat_id FROM booking_seats WHERE booking_id = $1",
+      `SELECT s.* FROM seats s JOIN booking_seats bs ON bs.seat_id = s.id WHERE bs.booking_id = $1`,
       [bookingId]
     );
-    const oldSeatIds = oldSeatRows.map((r) => r.seat_id);
+    const oldSeatIds = oldSeatDetails.map((r) => r.id);
+    const oldSeatLabels = oldSeatDetails
+      .map((s) => `${s.row_label}${s.col_number}`)
+      .sort()
+      .join(", ");
 
     const { rows: newSeats } = await clientQuery<Seat>(
       client,
@@ -606,6 +809,22 @@ export async function updateBookingSeats(
       }
     }
 
+    // Only paid bookings already have a ticket in the customer's hands, so
+    // only flag those — a note here tells the customer to reprint, without
+    // creating a second booking record or losing the original one.
+    if (booking.status === "paid") {
+      const newSeatLabels = newSeats
+        .map((s) => `${s.row_label}${s.col_number}`)
+        .sort()
+        .join(", ");
+      const changedDate = new Date().toLocaleDateString();
+      const note = `Seats changed on ${changedDate}: ${oldSeatLabels || "—"} → ${newSeatLabels || "—"}. Please reprint your ticket below.`;
+      await client.query("UPDATE bookings SET seats_changed_note = $1 WHERE id = $2", [
+        note,
+        bookingId,
+      ]);
+    }
+
     const { rows } = await clientQuery<Booking>(
       client,
       "SELECT * FROM bookings WHERE id = $1",
@@ -615,23 +834,100 @@ export async function updateBookingSeats(
   });
 }
 
-export async function markBookingPaid(bookingId: string, stripeSessionId?: string) {
-  await withTransaction(async (client) => {
+// Builds the human-friendly booking reference shown on tickets, e.g.
+// "VISW161201" for the first booking of a "Viswanthan" showtime starting at
+// 12:00 on the 16th. First 4 letters of the movie title (uppercased, letters
+// only, padded with X if the title is short) + 2-digit day + 2-digit hour +
+// 2-digit sequence number (resets per showtime).
+function computeBookingNumber(movieTitle: string, startsAt: string, seq: number): string {
+  const letters = movieTitle
+    .replace(/[^a-zA-Z]/g, "")
+    .toUpperCase()
+    .padEnd(4, "X")
+    .slice(0, 4);
+  const d = new Date(startsAt);
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const hour = String(d.getUTCHours()).padStart(2, "0");
+  const seqStr = String(seq).padStart(2, "0");
+  return `${letters}${day}${hour}${seqStr}`;
+}
+
+export async function markBookingPaid(
+  bookingId: string,
+  opts?: {
+    stripeSessionId?: string;
+    depositReference?: string;
+    depositDate?: string;
+    paymentProofUrl?: string;
+  }
+): Promise<Booking> {
+  return withTransaction(async (client) => {
+    const { rows: bookingRows } = await clientQuery<Booking>(
+      client,
+      "SELECT * FROM bookings WHERE id = $1 FOR UPDATE",
+      [bookingId]
+    );
+    const booking = bookingRows[0];
+    if (!booking) throw new Error("BOOKING_NOT_FOUND");
+
     const { rows: seatRows } = await clientQuery<{ seat_id: string }>(
       client,
       "SELECT seat_id FROM booking_seats WHERE booking_id = $1",
       [bookingId]
     );
 
+    // Booking numbers are handed out once, atomically, the first time a
+    // booking is confirmed paid — never regenerated after that.
+    let bookingNumber = booking.booking_number;
+    if (!bookingNumber) {
+      const { rows: showtimeRows } = await clientQuery<{ starts_at: string; title: string }>(
+        client,
+        "SELECT st.starts_at, m.title FROM showtimes st JOIN movies m ON m.id = st.movie_id WHERE st.id = $1",
+        [booking.showtime_id]
+      );
+      const showtime = showtimeRows[0];
+      if (showtime) {
+        const { rows: seqRows } = await clientQuery<{ next_seq: number }>(
+          client,
+          `INSERT INTO showtime_booking_counters (showtime_id, next_seq) VALUES ($1, 1)
+           ON CONFLICT (showtime_id) DO UPDATE SET next_seq = showtime_booking_counters.next_seq + 1
+           RETURNING next_seq`,
+          [booking.showtime_id]
+        );
+        bookingNumber = computeBookingNumber(showtime.title, showtime.starts_at, seqRows[0].next_seq);
+      }
+    }
+
     await client.query(
-      "UPDATE bookings SET status = 'paid', stripe_session_id = $1 WHERE id = $2",
-      [stripeSessionId ?? null, bookingId]
+      `UPDATE bookings SET
+         status = 'paid',
+         stripe_session_id = COALESCE($1, stripe_session_id),
+         deposit_reference = COALESCE($2, deposit_reference),
+         deposit_date = COALESCE($3, deposit_date),
+         payment_proof_url = COALESCE($4, payment_proof_url),
+         booking_number = COALESCE($5, booking_number)
+       WHERE id = $6`,
+      [
+        opts?.stripeSessionId ?? null,
+        opts?.depositReference ?? null,
+        opts?.depositDate ?? null,
+        opts?.paymentProofUrl ?? null,
+        bookingNumber ?? null,
+        bookingId,
+      ]
     );
     await setSeatsStatus(
       seatRows.map((s) => s.seat_id),
       "booked",
       client
     );
+
+    const { rows } = await clientQuery<Booking>(
+      client,
+      "SELECT * FROM bookings WHERE id = $1",
+      [bookingId]
+    );
+    return rows[0];
   });
 }
 
@@ -661,12 +957,14 @@ export async function getBooking(id: string): Promise<Booking | undefined> {
 
 const BOOKING_DETAILS_SELECT = `
   SELECT b.*, m.title as movie_title, st.starts_at as starts_at,
+         u.phone as account_phone, u.whatsapp as account_whatsapp,
          (SELECT string_agg(s.row_label || s.col_number, ', ')
           FROM booking_seats bs JOIN seats s ON s.id = bs.seat_id
           WHERE bs.booking_id = b.id) as seat_labels
   FROM bookings b
   JOIN showtimes st ON st.id = b.showtime_id
   JOIN movies m ON m.id = st.movie_id
+  LEFT JOIN users u ON u.id = b.user_id
 `;
 
 export async function listBookingsForUser(userId: string): Promise<BookingWithDetails[]> {
@@ -690,4 +988,53 @@ export async function getBookingSeatIds(bookingId: string): Promise<string[]> {
     [bookingId]
   );
   return rows.map((r) => r.seat_id);
+}
+
+// ---------- Movie demand votes ----------
+// Anonymous thumbs-up ("interested") / thumbs-down ("not interested") votes
+// on the homepage poster grid — a quick demand signal for movies that don't
+// have a showtime yet, so we know what's worth bringing in.
+
+export async function recordMovieVote(
+  movieId: string,
+  voterKey: string,
+  vote: VoteValue
+): Promise<void> {
+  await query(
+    `INSERT INTO movie_votes (id, movie_id, voter_key, vote) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (movie_id, voter_key) DO UPDATE SET vote = $4, created_at = now()`,
+    [genId("vote"), movieId, voterKey, vote]
+  );
+}
+
+export async function getVoteCountsForMovies(
+  movieIds: string[]
+): Promise<Record<string, MovieVoteCounts>> {
+  const result: Record<string, MovieVoteCounts> = {};
+  for (const id of movieIds) result[id] = { up: 0, down: 0 };
+  if (movieIds.length === 0) return result;
+
+  const { rows } = await query<{ movie_id: string; vote: string; count: string }>(
+    "SELECT movie_id, vote, COUNT(*) as count FROM movie_votes WHERE movie_id = ANY($1) GROUP BY movie_id, vote",
+    [movieIds]
+  );
+  for (const row of rows) {
+    if (row.vote === "up") result[row.movie_id].up = Number(row.count);
+    else if (row.vote === "down") result[row.movie_id].down = Number(row.count);
+  }
+  return result;
+}
+
+export async function getVoterVotes(
+  voterKey: string,
+  movieIds: string[]
+): Promise<Record<string, VoteValue>> {
+  const result: Record<string, VoteValue> = {};
+  if (movieIds.length === 0) return result;
+  const { rows } = await query<{ movie_id: string; vote: string }>(
+    "SELECT movie_id, vote FROM movie_votes WHERE voter_key = $1 AND movie_id = ANY($2)",
+    [voterKey, movieIds]
+  );
+  for (const row of rows) result[row.movie_id] = row.vote as VoteValue;
+  return result;
 }
