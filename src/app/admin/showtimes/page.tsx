@@ -56,7 +56,7 @@ export default async function AdminShowtimesPage() {
                 <div>
                   <div className="font-medium">{st.movie_title}</div>
                   <div className="text-sm text-neutral-500">
-                    {new Date(st.starts_at).toLocaleString()} · {st.screen_name} · $
+                    {new Date(st.starts_at).toLocaleString()} · {st.screen_name} · AOA{" "}
                     {(st.price_cents / 100).toFixed(2)}
                   </div>
                 </div>
