@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const session = event.data.object as Stripe.Checkout.Session;
     const bookingId = session.metadata?.bookingId;
     if (bookingId) {
-      await markBookingPaid(bookingId, session.id);
+      await markBookingPaid(bookingId, { stripeSessionId: session.id });
     }
   }
 
