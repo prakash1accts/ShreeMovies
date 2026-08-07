@@ -201,7 +201,7 @@ export default function ReportsClient({
                 <td className="py-1">{b.movie_title}</td>
                 <td className="py-1">{new Date(b.starts_at).toLocaleString()}</td>
                 <td className="py-1">{b.seat_labels || "—"}</td>
-                <td className="py-1">${(b.total_cents / 100).toFixed(2)}</td>
+                <td className="py-1">AOA {(b.total_cents / 100).toFixed(2)}</td>
                 <td className="py-1">{b.status}</td>
               </tr>
             ))}
