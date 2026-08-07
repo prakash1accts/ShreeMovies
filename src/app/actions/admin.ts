@@ -12,6 +12,7 @@ import {
   createShowtime,
   createTheater,
   deleteMovie,
+  deleteScreen,
   deleteShowtime,
   listScreens,
   listTheaters,
@@ -104,12 +105,29 @@ export async function ensureDefaultTheaterAndScreen() {
     await createTheater("Shree Movies", "");
     theaters = await listTheaters();
   }
-  let screens = await listScreens(theaters[0].id);
-  if (screens.length === 0) {
-    await createScreen({ theaterId: theaters[0].id, name: "Screen 1", rows: 8, cols: 10 });
-    screens = await listScreens(theaters[0].id);
-  }
+  // No longer auto-creates a placeholder "Screen 1" — real screens (Screen 2,
+  // 3, 4, 6, 7, Sala VIP) are loaded from /admin/screens instead.
+  const screens = await listScreens(theaters[0].id);
   return { theater: theaters[0], screen: screens[0] };
+}
+
+// Removes a screen — only allowed while it has no showtimes attached, so this
+// can never silently orphan a booking history. Used to clean up the old
+// placeholder "Screen 1" (or any screen created by mistake).
+export async function deleteScreenAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  if (!id) return;
+  try {
+    await deleteScreen(id);
+  } catch (err) {
+    const message =
+      err instanceof Error && err.message === "SCREEN_HAS_SHOWTIMES"
+        ? "This screen has showtimes on it and can't be removed — delete or move those showtimes first."
+        : "Could not remove this screen.";
+    redirect(`/admin/screens?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/admin/screens");
 }
 
 // Creates (or, if they already exist by name, updates in place) the real
@@ -348,74 +366,3 @@ export async function createAdminBookingAction(
     await createAdminBooking({
       showtimeId,
       seatIds,
-      customerName,
-      unitPriceCents,
-      totalCents,
-      paymentTerms,
-      depositReference: paymentTerms === "deposit" ? depositReference : undefined,
-      depositDate: paymentTerms === "deposit" ? depositDate : undefined,
-    });
-  } catch (err) {
-    if (err instanceof Error && err.message === "SEATS_UNAVAILABLE") {
-      return {
-        error: "One or more selected seats were just booked by someone else. Please pick again.",
-      };
-    }
-    return { error: "Could not create the booking. Please try again." };
-  }
-
-  revalidatePath("/admin/bookings");
-  revalidatePath("/");
-  redirect("/admin/bookings");
-}
-
-// Called from the admin "Pending Payment Confirmation" list once the admin
-// has verified (in person / by phone / by bank transfer) that a customer's
-// online booking was actually paid for — this is what finalizes a 'pending'
-// booking to 'paid' and locks in the held seats as 'booked'.
-export async function confirmBookingPaymentAction(formData: FormData) {
-  await requireAdmin();
-  const id = String(formData.get("id") || "");
-  if (id) await markBookingPaid(id);
-  revalidatePath("/admin/bookings");
-  revalidatePath("/account");
-}
-
-// Cancels any booking (pending or paid) and releases its seats back to
-// 'available'. Used both for pending bookings that never got paid, and for
-// paid bookings a customer asked to cancel.
-export async function cancelBookingAction(formData: FormData) {
-  await requireAdmin();
-  const id = String(formData.get("id") || "");
-  if (id) await cancelBooking(id);
-  revalidatePath("/admin/bookings");
-  revalidatePath("/account");
-}
-
-// Re-seats an existing booking to a different set of seats (same ticket
-// count) — e.g. fixing a mis-picked seat at the box office.
-export async function editBookingSeatsAction(
-  _prevState: { error?: string } | undefined,
-  formData: FormData
-) {
-  await requireAdmin();
-
-  const bookingId = String(formData.get("bookingId") || "");
-  const seatIds = formData.getAll("seatIds").map(String);
-
-  if (!bookingId) return { error: "Missing booking id." };
-  if (seatIds.length === 0) return { error: "Please select seats." };
-
-  try {
-    await updateBookingSeats(bookingId, seatIds);
-  } catch (err) {
-    if (err instanceof Error && err.message === "SEATS_UNAVAILABLE") {
-      return { error: "One or more selected seats are already taken. Please pick again." };
-    }
-    return { error: "Could not update seats. Please try again." };
-  }
-
-  revalidatePath("/admin/bookings");
-  revalidatePath("/account");
-  redirect("/admin/bookings");
-}
