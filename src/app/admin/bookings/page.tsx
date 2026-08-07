@@ -33,18 +33,46 @@ export default async function AdminBookingsPage() {
             {pending.map((b) => (
               <div
                 key={b.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900 p-3 text-sm"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-3 text-sm"
               >
                 <div>
                   <div className="font-medium">{b.movie_title}</div>
                   <div className="text-neutral-400">
-                    {new Date(b.starts_at).toLocaleString()} · Seats: {b.seat_labels || "—"} · $
+                    {new Date(b.starts_at).toLocaleString()} · Seats: {b.seat_labels || "—"} · AOA{" "}
                     {(b.total_cents / 100).toFixed(2)}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <form action={confirmBookingPaymentAction}>
+                <div className="flex flex-wrap items-end gap-2">
+                  <form
+                    action={confirmBookingPaymentAction}
+                    className="flex flex-wrap items-end gap-2"
+                  >
                     <input type="hidden" name="id" value={b.id} />
+                    <label className="text-xs text-neutral-400">
+                      Deposit ref.
+                      <input
+                        type="text"
+                        name="depositReference"
+                        className="mt-0.5 block w-32 rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-neutral-200"
+                      />
+                    </label>
+                    <label className="text-xs text-neutral-400">
+                      Deposit date
+                      <input
+                        type="date"
+                        name="depositDate"
+                        className="mt-0.5 block rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-neutral-200"
+                      />
+                    </label>
+                    <label className="text-xs text-neutral-400">
+                      Proof
+                      <input
+                        type="file"
+                        name="paymentProof"
+                        accept="image/*,.pdf"
+                        className="mt-0.5 block w-36 text-xs text-neutral-400 file:mr-2 file:rounded file:border-0 file:bg-neutral-700 file:px-2 file:py-1 file:text-xs file:text-neutral-200"
+                      />
+                    </label>
                     <button className="rounded-md bg-green-700 px-3 py-1.5 text-white hover:bg-green-600">
                       Confirm Payment
                     </button>
@@ -99,8 +127,13 @@ export default async function AdminBookingsPage() {
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-3 text-neutral-400">{b.seat_labels || "—"}</td>
-                <td className="px-4 py-3">${(b.total_cents / 100).toFixed(2)}</td>
+                <td className="px-4 py-3 text-neutral-400">
+                  {b.seat_labels || "—"}
+                  {b.seats_changed_note && (
+                    <div className="mt-0.5 text-xs text-amber-400">⚠ seats changed</div>
+                  )}
+                </td>
+                <td className="px-4 py-3">AOA {(b.total_cents / 100).toFixed(2)}</td>
                 <td className="px-4 py-3 text-neutral-400">
                   {b.payment_terms
                     ? b.payment_terms === "deposit"
@@ -121,6 +154,9 @@ export default async function AdminBookingsPage() {
                   >
                     {b.status}
                   </span>
+                  {b.booking_number && (
+                    <div className="mt-0.5 text-xs text-neutral-500">#{b.booking_number}</div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-neutral-500">
                   {new Date(b.created_at).toLocaleString()}
