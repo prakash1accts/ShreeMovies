@@ -16,9 +16,11 @@ import {
   listScreens,
   listTheaters,
   markBookingPaid,
+  resyncShowtimeSeats,
   updateBookingSeats,
   updateMovie,
   updateScreenLayout,
+  updateShowtime,
 } from "@/lib/data";
 import { layoutMaxSeatNumber, REAL_SCREENS } from "@/lib/real-screens";
 
@@ -215,11 +217,73 @@ export async function createShowtimeAction(
   return { error: undefined };
 }
 
+export async function updateShowtimeAction(
+  _prevState: { error?: string } | undefined,
+  formData: FormData
+) {
+  await requireAdmin();
+
+  const id = String(formData.get("id") || "");
+  const movieId = String(formData.get("movieId") || "");
+  const screenId = String(formData.get("screenId") || "");
+  const date = String(formData.get("date") || "");
+  const time = String(formData.get("time") || "");
+  const price = Number(formData.get("price") || 12);
+
+  if (!id) return { error: "Missing showtime id." };
+  if (!movieId || !screenId || !date || !time) {
+    return { error: "Please fill in all fields." };
+  }
+
+  const startsAt = new Date(`${date}T${time}:00`);
+  if (Number.isNaN(startsAt.getTime())) {
+    return { error: "Invalid date/time." };
+  }
+
+  const result = await updateShowtime({
+    id,
+    movieId,
+    screenId,
+    startsAt: startsAt.toISOString(),
+    priceCents: Math.round(price * 100),
+  });
+
+  if (result.error) return { error: result.error };
+
+  revalidatePath("/admin/showtimes");
+  revalidatePath(`/showtimes/${id}`);
+  revalidatePath("/");
+  redirect("/admin/showtimes");
+}
+
 export async function deleteShowtimeAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") || "");
   if (id) await deleteShowtime(id);
   revalidatePath("/admin/showtimes");
+  revalidatePath("/");
+}
+
+// Regenerates a showtime's seat grid from its screen's current layout — for
+// showtimes that were created before a screen's real seat map was loaded (or
+// updated), so they're still showing the old plain grid. The showtimes page
+// only renders this button when it has already confirmed zero booked/held
+// seats, so the guard inside resyncShowtimeSeats should never actually fire
+// here, but it stays as a last line of defense against destroying bookings.
+export async function resyncShowtimeSeatsAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  if (id) {
+    try {
+      await resyncShowtimeSeats(id);
+    } catch {
+      // A booking/hold landed between page render and submit — safest thing
+      // is to leave the seats as-is rather than fail loudly on a form with
+      // nowhere to show the error.
+    }
+  }
+  revalidatePath("/admin/showtimes");
+  revalidatePath(`/showtimes/${id}`);
   revalidatePath("/");
 }
 
