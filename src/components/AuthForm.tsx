@@ -51,6 +51,30 @@ export default function AuthForm({
             className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-red-500"
           />
         </div>
+        {mode === "signup" && (
+          <>
+            <div>
+              <label className="mb-1 block text-sm text-neutral-300">Phone number</label>
+              <input
+                type="tel"
+                name="phone"
+                required
+                placeholder="e.g. 923 168 840"
+                className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-red-500"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-neutral-300">WhatsApp number</label>
+              <input
+                type="tel"
+                name="whatsapp"
+                required
+                placeholder="If different from your phone number above"
+                className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-red-500"
+              />
+            </div>
+          </>
+        )}
         <div>
           <label className="mb-1 block text-sm text-neutral-300">Password</label>
           <input
