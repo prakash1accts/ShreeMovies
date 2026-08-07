@@ -75,15 +75,74 @@ const screen7: ScreenLayout = {
   ],
 };
 
+// ---------- Screen 2 ----------
+// 13 rows (A front, closest to screen -> O back), up to 22 seats across.
+// Row C is a short row (only 7 seats); row B has a big center gap.
+const screen2: ScreenLayout = {
+  rows: [
+    { label: "A", seatNumbers: range(3, 21) },
+    { label: "B", seatNumbers: [...range(3, 6), ...range(18, 21)] },
+    { label: "C", seatNumbers: range(1, 7) },
+    { label: "D", seatNumbers: range(6, 21) },
+    { label: "E", seatNumbers: range(6, 21) },
+    { label: "F", seatNumbers: range(6, 21) },
+    { label: "G", seatNumbers: range(6, 21) },
+    { label: "H", seatNumbers: range(6, 21) },
+    { label: "J", seatNumbers: range(6, 21) },
+    { label: "L", seatNumbers: range(6, 21) },
+    { label: "M", seatNumbers: [1, 2, 3, ...range(6, 21)] },
+    { label: "N", seatNumbers: [1, 2, 3, ...range(6, 21)] },
+    { label: "O", seatNumbers: range(1, 22) },
+  ],
+};
+
+// ---------- Screen 3 ----------
+// 16 rows (A front, closest to screen -> R back), up to 24 seats across.
+// Row J is a short row (a middle gap); row L is short and irregular.
+const screen3: ScreenLayout = {
+  rows: [
+    { label: "A", seatNumbers: range(3, 24) },
+    { label: "B", seatNumbers: range(3, 24) },
+    { label: "C", seatNumbers: range(3, 24) },
+    { label: "D", seatNumbers: range(3, 24) },
+    { label: "E", seatNumbers: range(3, 24) },
+    { label: "F", seatNumbers: range(3, 24) },
+    { label: "G", seatNumbers: range(3, 24) },
+    { label: "H", seatNumbers: range(3, 24) },
+    { label: "J", seatNumbers: [3, 4, 5, 6, 21, 22, 23, 24] },
+    { label: "L", seatNumbers: [3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17] },
+    { label: "M", seatNumbers: range(3, 20) },
+    { label: "N", seatNumbers: range(3, 20) },
+    { label: "O", seatNumbers: range(3, 20) },
+    { label: "P", seatNumbers: range(3, 20) },
+    { label: "Q", seatNumbers: range(3, 20) },
+    { label: "R", seatNumbers: range(1, 21) },
+  ],
+};
+
+// ---------- Sala VIP ----------
+// 4 rows (A front, closest to screen -> D back), 13 seats across.
+const salaVip: ScreenLayout = {
+  rows: [
+    { label: "A", seatNumbers: range(1, 13) },
+    { label: "B", seatNumbers: range(1, 13) },
+    { label: "C", seatNumbers: range(1, 13) },
+    { label: "D", seatNumbers: range(1, 13) },
+  ],
+};
+
 export interface RealScreenDef {
   name: string;
   layout: ScreenLayout;
 }
 
 export const REAL_SCREENS: RealScreenDef[] = [
+  { name: "Screen 2", layout: screen2 },
+  { name: "Screen 3", layout: screen3 },
   { name: "Screen 4", layout: screen4 },
   { name: "Screen 6", layout: screen6 },
   { name: "Screen 7", layout: screen7 },
+  { name: "Sala VIP", layout: salaVip },
 ];
 
 export function layoutSeatCount(layout: ScreenLayout): number {
