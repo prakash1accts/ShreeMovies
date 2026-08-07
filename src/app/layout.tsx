@@ -21,9 +21,27 @@ export default async function RootLayout({
         <footer className="mx-auto max-w-6xl px-4 py-10 text-sm text-neutral-500 print:hidden">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span>Shree Movies — book your show online.</span>
-            <Link href="/contact" className="hover:text-neutral-300">
-              Contact Us
-            </Link>
+            <div className="flex items-center gap-4">
+              
+                href="https://www.instagram.com/shree_indianmovies?igsh=MXB0emhibng1OXk1dQ=="
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-neutral-300"
+              >
+                Instagram
+              </a>
+              
+                href="https://www.facebook.com/profile.php?id=100095605175114&mibextid=wwXIfr&mibextid=wwXIfr"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-neutral-300"
+              >
+                Facebook
+              </a>
+              <Link href="/contact" className="hover:text-neutral-300">
+                Contact Us
+              </Link>
+            </div>
           </div>
         </footer>
       </body>
