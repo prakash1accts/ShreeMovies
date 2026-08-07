@@ -46,7 +46,7 @@ export default async function BookingSuccessPage({
             confirm your payment. Please transfer the total amount to the bank account below, then
             send us the deposit slip / reference so we can confirm it. Once confirmed, this will
             switch to a final Paid booking with your seat numbers locked in — check back here or on{" "}
-            <Link href="/account" className="underline">
+            <Link <a href="/account" className="underline">
               My Bookings
             </Link>
             .
