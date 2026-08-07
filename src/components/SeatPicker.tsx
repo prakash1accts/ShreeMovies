@@ -142,7 +142,7 @@ export default function SeatPicker({
           </div>
           <div className="mt-1 flex justify-between text-lg font-semibold">
             <span>Total</span>
-            <span>${(total / 100).toFixed(2)}</span>
+            <span>AOA {(total / 100).toFixed(2)}</span>
           </div>
         </div>
 
