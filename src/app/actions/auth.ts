@@ -17,8 +17,10 @@ export async function signupAction(
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
+  const phone = String(formData.get("phone") || "").trim();
+  const whatsapp = String(formData.get("whatsapp") || "").trim();
 
-  if (!name || !email || !password) {
+  if (!name || !email || !password || !phone || !whatsapp) {
     return { error: "Please fill in all fields." };
   }
   if (password.length < 6) {
@@ -29,7 +31,7 @@ export async function signupAction(
   }
 
   const passwordHash = await hashPassword(password);
-  const user = await createUser({ name, email, passwordHash });
+  const user = await createUser({ name, email, passwordHash, phone, whatsapp });
   await setSessionCookie({
     id: user.id,
     name: user.name,
