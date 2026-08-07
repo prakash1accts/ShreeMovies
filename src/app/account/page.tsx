@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getUserById, listBookingsForUser } from "@/lib/data";
+import TicketButton from "@/components/TicketButton";
 
 export default async function AccountPage() {
   const session = await getSession();
@@ -46,14 +47,23 @@ export default async function AccountPage() {
                 <div className="text-sm text-neutral-500">
                   Seats: {b.seat_labels || "—"}
                 </div>
+                {b.booking_number && (
+                  <div className="text-xs text-neutral-500">
+                    Booking #{b.booking_number}
+                  </div>
+                )}
                 {b.status === "pending" && (
                   <div className="mt-1 text-xs text-yellow-400">
-                    Not final yet — awaiting payment confirmation from the theatre.
+                    Not final yet — awaiting payment confirmation. See the payment page for our
+                    bank transfer details.
                   </div>
+                )}
+                {b.seats_changed_note && (
+                  <div className="mt-1 text-xs text-amber-400">⚠ {b.seats_changed_note}</div>
                 )}
               </div>
               <div className="text-right">
-                <div className="font-medium">${(b.total_cents / 100).toFixed(2)}</div>
+                <div className="font-medium">AOA {(b.total_cents / 100).toFixed(2)}</div>
                 <span
                   className={[
                     "mt-1 inline-block rounded-full px-2 py-0.5 text-xs",
@@ -66,6 +76,11 @@ export default async function AccountPage() {
                 >
                   {b.status}
                 </span>
+                {b.status === "paid" && (
+                  <div className="mt-2">
+                    <TicketButton booking={b} />
+                  </div>
+                )}
               </div>
             </div>
           ))}
