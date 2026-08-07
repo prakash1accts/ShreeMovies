@@ -11,7 +11,7 @@ import type { BookingWithDetails } from "@/lib/data";
 function drawTicket(booking: BookingWithDetails): string | null {
   const canvas = document.createElement("canvas");
   canvas.width = 900;
-  canvas.height = 400;
+  canvas.height = booking.seats_changed_note ? 460 : 400;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
@@ -46,12 +46,20 @@ function drawTicket(booking: BookingWithDetails): string | null {
   ctx.fillStyle = "#d4d4d8";
   ctx.fillText(`Guest: ${booking.customer_name || "—"}`, 45, 235);
   ctx.fillText(`Seats: ${booking.seat_labels || "—"}`, 45, 265);
-  ctx.fillText(`Total: $${(booking.total_cents / 100).toFixed(2)}`, 45, 295);
+  ctx.fillText(`Total: AOA ${(booking.total_cents / 100).toFixed(2)}`, 45, 295);
+
+  let refY = 350;
+  if (booking.seats_changed_note) {
+    ctx.font = "13px Arial";
+    ctx.fillStyle = "#fbbf24";
+    wrapText(ctx, `⚠ ${booking.seats_changed_note}`, 45, 320, canvas.width - 90, 16);
+    refY = 410;
+  }
 
   ctx.font = "14px Arial";
   ctx.fillStyle = "#71717a";
-  ctx.fillText(`Booking Ref: ${booking.id}`, 45, 350);
-  ctx.fillText(`Status: ${booking.status.toUpperCase()}`, 45, 370);
+  ctx.fillText(`Booking Ref: ${booking.booking_number || booking.id}`, 45, refY);
+  ctx.fillText(`Status: ${booking.status.toUpperCase()}`, 45, refY + 20);
 
   return canvas.toDataURL("image/png");
 }
@@ -91,7 +99,9 @@ export default function TicketButton({ booking }: { booking: BookingWithDetails 
 
   const shareText = `Shree Movies ticket — ${booking.movie_title}, ${new Date(
     booking.starts_at
-  ).toLocaleString()}, Seats: ${booking.seat_labels || "—"}, Ref: ${booking.id}`;
+  ).toLocaleString()}, Seats: ${booking.seat_labels || "—"}, Ref: ${
+    booking.booking_number || booking.id
+  }`;
 
   return (
     <>
