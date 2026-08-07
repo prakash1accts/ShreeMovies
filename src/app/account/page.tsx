@@ -1,17 +1,27 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { listBookingsForUser } from "@/lib/data";
+import { getUserById, listBookingsForUser } from "@/lib/data";
 
 export default async function AccountPage() {
   const session = await getSession();
   if (!session) redirect("/login?next=/account");
 
-  const bookings = await listBookingsForUser(session.id);
+  const [user, bookings] = await Promise.all([
+    getUserById(session.id),
+    listBookingsForUser(session.id),
+  ]);
 
   return (
     <div>
       <h1 className="text-2xl font-bold">My Bookings</h1>
       <p className="mt-1 text-neutral-400">Signed in as {session.email}</p>
+      {(user?.phone || user?.whatsapp) && (
+        <p className="mt-1 text-sm text-neutral-500">
+          {user?.phone && `Phone: ${user.phone}`}
+          {user?.phone && user?.whatsapp && " · "}
+          {user?.whatsapp && `WhatsApp: ${user.whatsapp}`}
+        </p>
+      )}
 
       {bookings.length === 0 ? (
         <p className="mt-6 text-neutral-400">You haven&apos;t booked any tickets yet.</p>
