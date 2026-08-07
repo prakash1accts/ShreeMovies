@@ -46,7 +46,7 @@ export default async function BookingSuccessPage({
             confirm your payment. Please transfer the total amount to the bank account below, then
             send us the deposit slip / reference so we can confirm it. Once confirmed, this will
             switch to a final Paid booking with your seat numbers locked in — check back here or on{" "}
-            <Link <a href="/account" className="underline">
+            <Link href="/account" className="underline">
               My Bookings
             </Link>
             .
@@ -108,7 +108,7 @@ export default async function BookingSuccessPage({
         <p className="mt-4 text-neutral-400">We couldn&apos;t find that booking.</p>
       )}
       <Link
-       <a href="/account"
+        href="/account"
         className="mt-6 inline-block rounded-md bg-red-600 px-4 py-2 font-medium text-white hover:bg-red-500"
       >
         View my bookings
