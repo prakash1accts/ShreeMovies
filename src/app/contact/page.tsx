@@ -16,7 +16,7 @@ export default function ContactPage() {
           </h2>
           <p className="mt-1 text-lg">
             
-              href={`https://wa.me/${BANK_ACCOUNT.whatsapp.replace(/[^0-9]/g, "")}`}
+              <a href={`https://wa.me/${BANK_ACCOUNT.whatsapp.replace(/[^0-9]/g, "")}`}
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-red-400"
