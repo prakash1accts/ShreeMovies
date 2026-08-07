@@ -30,7 +30,7 @@ export default async function ShowtimePage({
           · {showtime.theater_name} · {showtime.screen_name}
         </p>
         <p className="mt-1 text-sm text-neutral-500">
-          ${(showtime.price_cents / 100).toFixed(2)} per seat
+          AOA {(showtime.price_cents / 100).toFixed(2)} per seat
         </p>
       </div>
 
