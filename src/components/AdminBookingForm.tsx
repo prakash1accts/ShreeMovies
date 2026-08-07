@@ -114,7 +114,7 @@ export default function AdminBookingForm({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm text-neutral-300">Price per ticket ($)</label>
+          <label className="mb-1 block text-sm text-neutral-300">Price per ticket (AOA)</label>
           <input
             type="number"
             step="0.01"
@@ -130,7 +130,7 @@ export default function AdminBookingForm({
           <label className="mb-1 block text-sm text-neutral-300">Total value</label>
           <input
             readOnly
-            value={`$${total.toFixed(2)}`}
+            value={`AOA ${total.toFixed(2)}`}
             className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-400"
           />
         </div>
