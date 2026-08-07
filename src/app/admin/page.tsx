@@ -14,7 +14,7 @@ export default async function AdminOverviewPage() {
     { label: "Movies", value: movies.length, href: "/admin/movies" },
     { label: "Showtimes", value: showtimes.length, href: "/admin/showtimes" },
     { label: "Paid bookings", value: paidBookings.length, href: "/admin/bookings" },
-    { label: "Revenue", value: `$${(revenueCents / 100).toFixed(2)}`, href: "/admin/bookings" },
+    { label: "Revenue", value: `AOA ${(revenueCents / 100).toFixed(2)}`, href: "/admin/bookings" },
   ];
 
   return (
