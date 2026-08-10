@@ -62,7 +62,7 @@ export default async function BookingSuccessPage({
           </div>
           <p className="mt-3 text-sm text-yellow-200/90">
             Send your deposit slip via WhatsApp{" "}
-            
+            <a 
               href={`https://wa.me/${BANK_ACCOUNT.whatsapp.replace(/[^0-9]/g, "")}`}
               className="underline"
               target="_blank"
