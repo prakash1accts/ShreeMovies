@@ -87,17 +87,27 @@ export default async function MovieDetailPage({
                 <div className="mb-2 text-sm font-medium text-neutral-400">{day}</div>
                 <div className="flex flex-wrap gap-2">
                   {times.map((st) => (
-                    <Link
+                    // The time/screen label is plain text now, not a link —
+                    // only the "Book ticket" button is clickable, so there's
+                    // no ambiguity about where to tap to actually book.
+                    <div
                       key={st.id}
-                      href={`/showtimes/${st.id}`}
-                      className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm hover:border-red-500 hover:text-red-400"
+                      className="flex items-center gap-3 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
                     >
-                      {new Date(st.starts_at).toLocaleTimeString(undefined, {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                      <span className="ml-2 text-neutral-500">{st.screen_name}</span>
-                    </Link>
+                      <span>
+                        {new Date(st.starts_at).toLocaleTimeString(undefined, {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                        <span className="ml-2 text-neutral-500">{st.screen_name}</span>
+                      </span>
+                      <Link
+                        href={`/showtimes/${st.id}`}
+                        className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
+                      >
+                        Book ticket
+                      </Link>
+                    </div>
                   ))}
                 </div>
               </div>
