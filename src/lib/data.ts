@@ -958,6 +958,10 @@ export async function getBooking(id: string): Promise<Booking | undefined> {
 const BOOKING_DETAILS_SELECT = `
   SELECT b.*, m.title as movie_title, st.starts_at as starts_at,
          u.phone as account_phone, u.whatsapp as account_whatsapp,
+         -- Walk-in bookings store the name directly on the booking; online
+         -- bookings don't, so fall back to the account holder's name. Listed
+         -- after b.* so it overwrites b.customer_name in the result row.
+         COALESCE(b.customer_name, u.name) as customer_name,
          (SELECT string_agg(s.row_label || s.col_number, ', ')
           FROM booking_seats bs JOIN seats s ON s.id = bs.seat_id
           WHERE bs.booking_id = b.id) as seat_labels
@@ -980,6 +984,20 @@ export async function listAllBookings(): Promise<BookingWithDetails[]> {
     `${BOOKING_DETAILS_SELECT} ORDER BY b.created_at DESC`
   );
   return rows;
+}
+
+// Looks up a booking for the ticket QR / staff verification screen — by its
+// human-friendly booking_number first (what's actually encoded in the QR
+// code), falling back to the raw booking id for older/edge-case bookings
+// that never got a booking_number assigned.
+export async function getBookingByReference(
+  ref: string
+): Promise<BookingWithDetails | undefined> {
+  const { rows } = await query<BookingWithDetails>(
+    `${BOOKING_DETAILS_SELECT} WHERE b.booking_number = $1 OR b.id = $1 LIMIT 1`,
+    [ref]
+  );
+  return rows[0];
 }
 
 export async function getBookingSeatIds(bookingId: string): Promise<string[]> {
