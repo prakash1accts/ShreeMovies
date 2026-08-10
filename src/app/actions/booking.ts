@@ -11,6 +11,7 @@ import {
   getUserById,
 } from "@/lib/data";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
+import { formatVenueDateTime } from "@/lib/timezone";
 
 export async function bookSeatsAction(
   _prevState: { error?: string } | undefined,
@@ -83,9 +84,7 @@ export async function bookSeatsAction(
           currency: "usd",
           unit_amount: showtime.price_cents,
           product_data: {
-            name: `${showtime.movie_title} — ${new Date(
-              showtime.starts_at
-            ).toLocaleString()}`,
+            name: `${showtime.movie_title} — ${formatVenueDateTime(showtime.starts_at)}`,
             description: `Seats: ${seats
               .map((s) => `${s.row_label}${s.col_number}`)
               .join(", ")}`,
