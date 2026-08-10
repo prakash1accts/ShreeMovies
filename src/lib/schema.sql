@@ -8,10 +8,12 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL DEFAULT 'customer', -- 'customer' | 'admin'
   phone TEXT, -- local phone number, captured at signup for calls/SMS
   whatsapp TEXT, -- WhatsApp number, captured separately since it may differ from `phone`
+  is_blocked BOOLEAN NOT NULL DEFAULT false, -- set by an admin to prevent this account from logging in or booking
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS theaters (
   id TEXT PRIMARY KEY,
