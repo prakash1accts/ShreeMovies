@@ -8,6 +8,7 @@ export interface User {
   role: Role;
   phone: string | null;
   whatsapp: string | null;
+  is_blocked: boolean;
   created_at: string;
 }
 
