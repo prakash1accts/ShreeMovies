@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getBookingByReference, getShowtime } from "@/lib/data";
+import { checkInBookingAction } from "@/app/actions/admin";
 
 // Staff-facing ticket verification screen, reached by scanning the QR code
 // printed on a customer's ticket. Deliberately NOT under /admin (which
@@ -101,6 +102,24 @@ export default async function VerifyTicketPage({
               </div>
             )}
           </div>
+
+          {booking.status === "paid" &&
+            (booking.checked_in_at ? (
+              <div className="rounded-lg border border-blue-800 bg-blue-950/30 p-4 text-center text-sm font-semibold text-blue-300">
+                ✅ Already admitted at {new Date(booking.checked_in_at).toLocaleTimeString()}
+              </div>
+            ) : (
+              <form action={checkInBookingAction}>
+                <input type="hidden" name="bookingId" value={booking.id} />
+                <input type="hidden" name="ref" value={ref} />
+                <button
+                  type="submit"
+                  className="w-full rounded-md bg-green-700 px-4 py-3 text-center text-base font-semibold text-white hover:bg-green-600"
+                >
+                  ✅ Admit — Confirm Entry
+                </button>
+              </form>
+            ))}
 
           <Link
             href="/admin/bookings"
