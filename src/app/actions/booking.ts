@@ -8,6 +8,7 @@ import {
   createPendingBooking,
   getSeatsByIds,
   getShowtime,
+  getUserById,
 } from "@/lib/data";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 
@@ -18,6 +19,14 @@ export async function bookSeatsAction(
   const session = await getSession();
   if (!session) {
     redirect("/login?next=" + encodeURIComponent(String(formData.get("returnTo") || "/")));
+  }
+
+  // Sessions are self-contained JWTs with no server-side revocation, so a
+  // customer blocked after they logged in would otherwise keep booking —
+  // re-check their live status here rather than trusting the session alone.
+  const currentUser = await getUserById(session.id);
+  if (currentUser?.is_blocked) {
+    return { error: "This account has been blocked. Please contact the theatre for help." };
   }
 
   const showtimeId = String(formData.get("showtimeId") || "");
