@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import { createAdminBookingAction } from "@/app/actions/admin";
 import type { Seat } from "@/lib/types";
 import type { ShowtimeWithMovie } from "@/lib/data";
+import { formatVenueDateTime } from "@/lib/timezone";
 
 export default function AdminBookingForm({
   showtimes,
@@ -82,7 +83,7 @@ export default function AdminBookingForm({
             {showtimes.length === 0 && <option value="">No upcoming showtimes</option>}
             {showtimes.map((st) => (
               <option key={st.id} value={st.id}>
-                {st.movie_title} — {new Date(st.starts_at).toLocaleString()} — {st.screen_name}
+                {st.movie_title} — {formatVenueDateTime(st.starts_at)} — {st.screen_name}
               </option>
             ))}
           </select>
