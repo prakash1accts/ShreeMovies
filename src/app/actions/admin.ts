@@ -16,6 +16,7 @@ import {
   deleteShowtime,
   listScreens,
   listTheaters,
+  markBookingCheckedIn,
   markBookingPaid,
   resyncShowtimeSeats,
   updateBookingSeats,
@@ -454,4 +455,21 @@ export async function editBookingSeatsAction(
   revalidatePath("/admin/bookings");
   revalidatePath("/account");
   redirect("/admin/bookings");
+}
+
+// ---------- Ticket check-in (QR scan at the door) ----------
+
+// Called from the ticket-verification screen when staff tap "Admit" on a
+// valid, paid ticket. markBookingCheckedIn is idempotent (first tap wins),
+// so tapping twice — or re-scanning an already-admitted ticket — never
+// double-counts against the showtime's admitted total.
+export async function checkInBookingAction(formData: FormData) {
+  await requireAdmin();
+  const bookingId = String(formData.get("bookingId") || "");
+  const ref = String(formData.get("ref") || "");
+  if (bookingId) {
+    await markBookingCheckedIn(bookingId);
+  }
+  revalidatePath("/admin/showtimes");
+  redirect(`/verify/${ref}`);
 }
