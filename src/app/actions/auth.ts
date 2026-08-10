@@ -85,6 +85,7 @@ export async function loginAction(
 ) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
+  const next = String(formData.get("next") || "");
 
   const user = await getUserByEmail(email);
   if (!user) {
@@ -101,6 +102,14 @@ export async function loginAction(
     email: user.email,
     role: user.role,
   });
+
+  // Only honor `next` when it's a same-site path (starts with a single "/",
+  // not "//" or "/\" which browsers can treat as protocol-relative) — e.g.
+  // sent back here after scanning a ticket QR while logged out, so staff
+  // land back on that exact booking instead of the generic dashboard.
+  if (next && /^\/(?!\/|\\)/.test(next)) {
+    redirect(next);
+  }
 
   redirect(user.role === "admin" ? "/admin" : "/account");
 }
