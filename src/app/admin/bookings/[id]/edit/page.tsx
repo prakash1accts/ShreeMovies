@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getBooking, getBookingSeatIds, getShowtime, listSeatsForShowtime } from "@/lib/data";
 import EditBookingForm from "@/components/EditBookingForm";
+import { formatVenueDateTime } from "@/lib/timezone";
 
 export default async function EditBookingPage({
   params,
@@ -27,7 +28,7 @@ export default async function EditBookingPage({
       </Link>
       <h1 className="mt-2 text-2xl font-bold">Edit Booking</h1>
       <p className="mt-1 text-neutral-400">
-        {showtime.movie_title} · {new Date(showtime.starts_at).toLocaleString()} ·{" "}
+        {showtime.movie_title} · {formatVenueDateTime(showtime.starts_at)} ·{" "}
         {booking.customer_name || "Online booking"}
       </p>
 
