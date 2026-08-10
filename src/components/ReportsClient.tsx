@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { BookingWithDetails, ShowtimeWithMovie } from "@/lib/data";
+import { formatVenueDateTime } from "@/lib/timezone";
 
 function toCSV(rows: string[][]): string {
   return rows
@@ -66,13 +67,13 @@ export default function ReportsClient({
     const rows = bookings.map((b) => [
       b.customer_name || "",
       b.movie_title,
-      new Date(b.starts_at).toLocaleString(),
+      formatVenueDateTime(b.starts_at),
       b.seat_labels || "",
       (b.total_cents / 100).toFixed(2),
       b.payment_terms || "",
       b.status,
       attendanceLabel(b),
-      new Date(b.created_at).toLocaleString(),
+      formatVenueDateTime(b.created_at),
     ]);
     downloadText("audience-report.csv", toCSV([header, ...rows]));
   }
@@ -137,7 +138,7 @@ export default function ReportsClient({
             <option value="">All showtimes</option>
             {showtimes.map((st) => (
               <option key={st.id} value={st.id}>
-                {st.movie_title} — {new Date(st.starts_at).toLocaleString()}
+                {st.movie_title} — {formatVenueDateTime(st.starts_at)}
               </option>
             ))}
           </select>
@@ -164,9 +165,7 @@ export default function ReportsClient({
           {showtimeId
             ? showtimes.find((s) => s.id === showtimeId)?.movie_title +
               " — " +
-              new Date(
-                showtimes.find((s) => s.id === showtimeId)?.starts_at ?? ""
-              ).toLocaleString()
+              formatVenueDateTime(showtimes.find((s) => s.id === showtimeId)?.starts_at ?? "")
             : "All showtimes"}
         </p>
         <table className="mt-3 w-full border-collapse text-sm text-black">
@@ -209,7 +208,7 @@ export default function ReportsClient({
               <tr key={b.id} className="border-b border-neutral-400">
                 <td className="py-1">{b.customer_name || "—"}</td>
                 <td className="py-1">{b.movie_title}</td>
-                <td className="py-1">{new Date(b.starts_at).toLocaleString()}</td>
+                <td className="py-1">{formatVenueDateTime(b.starts_at)}</td>
                 <td className="py-1">{b.seat_labels || "—"}</td>
                 <td className="py-1">AOA {(b.total_cents / 100).toFixed(2)}</td>
                 <td className="py-1">{b.status}</td>
@@ -239,7 +238,7 @@ export default function ReportsClient({
                 <td className="px-4 py-3">{b.customer_name || "—"}</td>
                 <td className="px-4 py-3">{b.movie_title}</td>
                 <td className="px-4 py-3 text-neutral-400">
-                  {new Date(b.starts_at).toLocaleString()}
+                  {formatVenueDateTime(b.starts_at)}
                 </td>
                 <td className="px-4 py-3 text-neutral-400">{b.seat_labels || "—"}</td>
                 <td className="px-4 py-3">{b.status}</td>
