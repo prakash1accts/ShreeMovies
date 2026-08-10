@@ -88,6 +88,7 @@ export interface Booking {
   booking_number: string | null;
   seats_changed_note: string | null;
   created_by_admin: boolean;
+  checked_in_at: string | null;
   created_at: string;
 }
 
