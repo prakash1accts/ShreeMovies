@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getBooking, getShowtime, markBookingPaid } from "@/lib/data";
 import { getStripe } from "@/lib/stripe";
 import { BANK_ACCOUNT } from "@/lib/payment-info";
+import { formatVenueDateTime } from "@/lib/timezone";
 
 export default async function BookingSuccessPage({
   searchParams,
@@ -62,7 +63,7 @@ export default async function BookingSuccessPage({
           <p className="mt-3 text-sm text-yellow-200/90">
             Send your deposit slip via WhatsApp{" "}
             
-              <a href={`https://wa.me/${BANK_ACCOUNT.whatsapp.replace(/[^0-9]/g, "")}`}
+              href={`https://wa.me/${BANK_ACCOUNT.whatsapp.replace(/[^0-9]/g, "")}`}
               className="underline"
               target="_blank"
               rel="noopener noreferrer"
@@ -82,7 +83,7 @@ export default async function BookingSuccessPage({
         <div className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900 p-5 text-left">
           <div className="font-semibold">{showtime.movie_title}</div>
           <div className="text-sm text-neutral-400">
-            {new Date(showtime.starts_at).toLocaleString()}
+            {formatVenueDateTime(showtime.starts_at)}
           </div>
           <div className="mt-2 text-sm text-neutral-400">
             Status:{" "}
