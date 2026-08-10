@@ -27,10 +27,11 @@ export default function SeatPicker({
       if (!map.has(seat.row_label)) map.set(seat.row_label, []);
       map.get(seat.row_label)!.push(seat);
     }
-    // Back row (last letter, e.g. "R") at the top, front row closest to the
-    // screen (e.g. "A") at the bottom — matches how the theater's own
-    // box-office seating chart is laid out, for every screen.
-    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+    // Front row closest to the screen (e.g. "A") right under the screen
+    // banner, back row (last letter, e.g. "G") at the bottom, farthest from
+    // the screen — matches how the theater's own box-office seating chart
+    // is laid out, for every screen.
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [seats]);
 
   // Real seat maps have irregular rows (gaps for aisles, pillars, short
