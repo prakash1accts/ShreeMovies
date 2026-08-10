@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getMovie, listShowtimesForMovie } from "@/lib/data";
 import PosterImage from "@/components/PosterImage";
+import { formatVenueDate, formatVenueTime } from "@/lib/timezone";
 
 export default async function MovieDetailPage({
   params,
@@ -17,7 +18,7 @@ export default async function MovieDetailPage({
   // Group showtimes by calendar day for a cleaner layout
   const byDay = new Map<string, typeof showtimes>();
   for (const st of showtimes) {
-    const day = new Date(st.starts_at).toLocaleDateString(undefined, {
+    const day = formatVenueDate(st.starts_at, {
       weekday: "short",
       month: "short",
       day: "numeric",
@@ -95,7 +96,7 @@ export default async function MovieDetailPage({
                       className="flex items-center gap-3 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
                     >
                       <span>
-                        {new Date(st.starts_at).toLocaleTimeString(undefined, {
+                        {formatVenueTime(st.starts_at, {
                           hour: "numeric",
                           minute: "2-digit",
                         })}
