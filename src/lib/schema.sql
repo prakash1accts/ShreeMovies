@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   booking_number TEXT, -- human-friendly reference assigned on payment confirmation, e.g. "VISW161201"
   seats_changed_note TEXT, -- set when admin re-seats a paid booking, so the customer sees "seats changed" and knows to reprint
   created_by_admin BOOLEAN NOT NULL DEFAULT false,
+  checked_in_at TIMESTAMPTZ, -- set when staff tap "Admit" on the ticket-verification screen (QR scan at the door); null means not yet admitted
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE bookings ALTER COLUMN user_id DROP NOT NULL;
@@ -92,6 +93,7 @@ ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS booking_number TEXT;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS seats_changed_note TEXT;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS created_by_admin BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS booking_seats (
   booking_id TEXT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
