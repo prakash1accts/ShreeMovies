@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getUserById, listBookingsForUser } from "@/lib/data";
 import TicketButton from "@/components/TicketButton";
+import { formatVenueDateTime } from "@/lib/timezone";
 
 export default async function AccountPage() {
   const session = await getSession();
@@ -36,7 +37,7 @@ export default async function AccountPage() {
               <div>
                 <div className="font-semibold">{b.movie_title}</div>
                 <div className="text-sm text-neutral-400">
-                  {new Date(b.starts_at).toLocaleString(undefined, {
+                  {formatVenueDateTime(b.starts_at, {
                     weekday: "short",
                     month: "short",
                     day: "numeric",
