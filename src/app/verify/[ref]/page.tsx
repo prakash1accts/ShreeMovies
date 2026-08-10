@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getBookingByReference, getShowtime } from "@/lib/data";
 import { checkInBookingAction } from "@/app/actions/admin";
+import { formatVenueDateTime, formatVenueTime } from "@/lib/timezone";
 
 // Staff-facing ticket verification screen, reached by scanning the QR code
 // printed on a customer's ticket. Deliberately NOT under /admin (which
@@ -57,7 +58,7 @@ export default async function VerifyTicketPage({
             <div className="text-lg font-semibold">{booking.movie_title}</div>
             {showtime && (
               <div className="mt-1 text-sm text-neutral-400">
-                {new Date(showtime.starts_at).toLocaleString()} · {showtime.screen_name}
+                {formatVenueDateTime(showtime.starts_at)} · {showtime.screen_name}
               </div>
             )}
 
@@ -106,7 +107,7 @@ export default async function VerifyTicketPage({
           {booking.status === "paid" &&
             (booking.checked_in_at ? (
               <div className="rounded-lg border border-blue-800 bg-blue-950/30 p-4 text-center text-sm font-semibold text-blue-300">
-                ✅ Already admitted at {new Date(booking.checked_in_at).toLocaleTimeString()}
+                ✅ Already admitted at {formatVenueTime(booking.checked_in_at)}
               </div>
             ) : (
               <form action={checkInBookingAction}>
