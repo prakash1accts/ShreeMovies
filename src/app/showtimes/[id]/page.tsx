@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getShowtime, listSeatsForShowtime } from "@/lib/data";
 import { getSession } from "@/lib/auth";
 import SeatPicker from "@/components/SeatPicker";
+import { formatVenueDateTime } from "@/lib/timezone";
 
 export default async function ShowtimePage({
   params,
@@ -20,7 +21,7 @@ export default async function ShowtimePage({
       <div className="mb-8 text-center">
         <h1 className="text-2xl font-bold">{showtime.movie_title}</h1>
         <p className="mt-1 text-neutral-400">
-          {new Date(showtime.starts_at).toLocaleString(undefined, {
+          {formatVenueDateTime(showtime.starts_at, {
             weekday: "long",
             month: "long",
             day: "numeric",
