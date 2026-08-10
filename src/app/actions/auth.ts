@@ -95,6 +95,9 @@ export async function loginAction(
   if (!valid) {
     return { error: "Invalid email or password." };
   }
+  if (user.is_blocked) {
+    return { error: "This account has been blocked. Please contact the theatre for help." };
+  }
 
   await setSessionCookie({
     id: user.id,
