@@ -3,17 +3,7 @@
 import { useActionState } from "react";
 import { createShowtimeAction, updateShowtimeAction } from "@/app/actions/admin";
 import type { Movie, Screen, Showtime } from "@/lib/types";
-
-// Splits an ISO starts_at into the separate date/time strings the <input
-// type="date"> and <input type="time"> fields need for their defaultValue,
-// in the browser's local time (matching how the create form interprets them).
-function splitLocalDateTime(iso: string): { date: string; time: string } {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  return { date, time };
-}
+import { splitVenueDateTime } from "@/lib/timezone";
 
 export default function AdminShowtimeForm({
   movies,
@@ -30,7 +20,7 @@ export default function AdminShowtimeForm({
     undefined
   );
   const { date: defaultDate, time: defaultTime } = showtime
-    ? splitLocalDateTime(showtime.starts_at)
+    ? splitVenueDateTime(showtime.starts_at)
     : { date: undefined, time: undefined };
 
   return (
