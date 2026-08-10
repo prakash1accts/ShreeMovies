@@ -26,6 +26,7 @@ import {
   updateShowtime,
 } from "@/lib/data";
 import { layoutMaxSeatNumber, REAL_SCREENS } from "@/lib/real-screens";
+import { parseVenueDateTime } from "@/lib/timezone";
 
 export async function createMovieAction(
   _prevState: { error?: string } | undefined,
@@ -220,7 +221,7 @@ export async function createShowtimeAction(
     return { error: "Please fill in all fields." };
   }
 
-  const startsAt = new Date(`${date}T${time}:00`);
+  const startsAt = parseVenueDateTime(date, time);
   if (Number.isNaN(startsAt.getTime())) {
     return { error: "Invalid date/time." };
   }
@@ -255,7 +256,7 @@ export async function updateShowtimeAction(
     return { error: "Please fill in all fields." };
   }
 
-  const startsAt = new Date(`${date}T${time}:00`);
+  const startsAt = parseVenueDateTime(date, time);
   if (Number.isNaN(startsAt.getTime())) {
     return { error: "Invalid date/time." };
   }
