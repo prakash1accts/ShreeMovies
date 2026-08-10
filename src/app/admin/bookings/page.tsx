@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listAllBookings } from "@/lib/data";
 import { confirmBookingPaymentAction, cancelBookingAction } from "@/app/actions/admin";
 import TicketButton from "@/components/TicketButton";
+import { formatVenueDateTime } from "@/lib/timezone";
 
 export default async function AdminBookingsPage() {
   const bookings = await listAllBookings();
@@ -38,7 +39,7 @@ export default async function AdminBookingsPage() {
                 <div>
                   <div className="font-medium">{b.movie_title}</div>
                   <div className="text-neutral-400">
-                    {new Date(b.starts_at).toLocaleString()} · Seats: {b.seat_labels || "—"} · AOA{" "}
+                    {formatVenueDateTime(b.starts_at)} · Seats: {b.seat_labels || "—"} · AOA{" "}
                     {(b.total_cents / 100).toFixed(2)}
                   </div>
                 </div>
@@ -110,7 +111,7 @@ export default async function AdminBookingsPage() {
               <tr key={b.id} className="border-t border-neutral-800">
                 <td className="px-4 py-3">{b.movie_title}</td>
                 <td className="px-4 py-3 text-neutral-400">
-                  {new Date(b.starts_at).toLocaleString()}
+                  {formatVenueDateTime(b.starts_at)}
                 </td>
                 <td className="px-4 py-3 text-neutral-400">
                   {b.customer_name || "—"}
@@ -159,7 +160,7 @@ export default async function AdminBookingsPage() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-neutral-500">
-                  {new Date(b.created_at).toLocaleString()}
+                  {formatVenueDateTime(b.created_at)}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1.5">
