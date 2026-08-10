@@ -27,11 +27,11 @@ export default function SeatPicker({
       if (!map.has(seat.row_label)) map.set(seat.row_label, []);
       map.get(seat.row_label)!.push(seat);
     }
-    // Front row closest to the screen (e.g. "A") right under the screen
-    // banner, back row (last letter, e.g. "G") at the bottom, farthest from
-    // the screen — matches how the theater's own box-office seating chart
-    // is laid out, for every screen.
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    // Back row (last letter, e.g. "G") at the top, front row closest to the
+    // screen (e.g. "A") at the bottom, right above the screen banner —
+    // matches how the theater's own box-office seating chart is laid out,
+    // for every screen.
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   }, [seats]);
 
   // Real seat maps have irregular rows (gaps for aisles, pillars, short
@@ -57,12 +57,6 @@ export default function SeatPicker({
 
   return (
     <div>
-      <div className="mb-6 flex justify-center">
-        <div className="w-full max-w-md rounded-md border-b-4 border-neutral-600 bg-neutral-800/50 py-2 text-center text-xs uppercase tracking-widest text-neutral-400">
-          Screen
-        </div>
-      </div>
-
       {/* The outer div owns the horizontal scroll (for wide real seat maps on
           narrow screens); the inner div centers itself via mx-auto when it's
           narrower than the viewport, and simply left-aligns (scroll starts
@@ -111,6 +105,16 @@ export default function SeatPicker({
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Screen sits right after the last-rendered row (front row "A"),
+          not at the top — the back row ("G") is listed first, so the
+          screen has to be down here, next to A, to actually be next to
+          the row it's closest to. */}
+      <div className="mt-6 flex justify-center">
+        <div className="w-full max-w-md rounded-md border-t-4 border-neutral-600 bg-neutral-800/50 py-2 text-center text-xs uppercase tracking-widest text-neutral-400">
+          Screen
         </div>
       </div>
 
