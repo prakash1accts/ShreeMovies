@@ -19,6 +19,7 @@ import {
   markBookingCheckedIn,
   markBookingPaid,
   resyncShowtimeSeats,
+  setUserBlocked,
   updateBookingSeats,
   updateMovie,
   updateScreenLayout,
@@ -472,4 +473,23 @@ export async function checkInBookingAction(formData: FormData) {
   }
   revalidatePath("/admin/showtimes");
   redirect(`/verify/${ref}`);
+}
+
+// ---------- Customer accounts ----------
+
+// Blocking stops the account from logging in (checked in loginAction) or
+// booking (re-checked in bookSeatsAction) — see setUserBlocked's comment in
+// data.ts for why an already-active session isn't forcibly ended.
+export async function blockUserAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  if (id) await setUserBlocked(id, true);
+  revalidatePath("/admin/users");
+}
+
+export async function unblockUserAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  if (id) await setUserBlocked(id, false);
+  revalidatePath("/admin/users");
 }
