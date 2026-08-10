@@ -28,6 +28,13 @@ function downloadText(filename: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
+// "Admitted" once staff have tapped Admit on this booking's ticket
+// (checked_in_at set), otherwise "Not yet" — shown next to Status so anyone
+// reading the report can see who's actually walked in, not just who paid.
+function attendanceLabel(b: BookingWithDetails): string {
+  return b.checked_in_at ? "Admitted" : "Not yet";
+}
+
 export default function ReportsClient({
   bookings,
   showtimes,
@@ -53,6 +60,7 @@ export default function ReportsClient({
       "Total",
       "Payment",
       "Status",
+      "Attendance",
       "Booked At",
     ];
     const rows = bookings.map((b) => [
@@ -63,6 +71,7 @@ export default function ReportsClient({
       (b.total_cents / 100).toFixed(2),
       b.payment_terms || "",
       b.status,
+      attendanceLabel(b),
       new Date(b.created_at).toLocaleString(),
     ]);
     downloadText("audience-report.csv", toCSV([header, ...rows]));
@@ -192,6 +201,7 @@ export default function ReportsClient({
               <th className="py-1 text-left">Seats</th>
               <th className="py-1 text-left">Total</th>
               <th className="py-1 text-left">Status</th>
+              <th className="py-1 text-left">Attendance</th>
             </tr>
           </thead>
           <tbody>
@@ -203,6 +213,7 @@ export default function ReportsClient({
                 <td className="py-1">{b.seat_labels || "—"}</td>
                 <td className="py-1">AOA {(b.total_cents / 100).toFixed(2)}</td>
                 <td className="py-1">{b.status}</td>
+                <td className="py-1">{attendanceLabel(b)}</td>
               </tr>
             ))}
           </tbody>
@@ -219,6 +230,7 @@ export default function ReportsClient({
               <th className="px-4 py-3">Showtime</th>
               <th className="px-4 py-3">Seats</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Attendance</th>
             </tr>
           </thead>
           <tbody>
@@ -231,6 +243,13 @@ export default function ReportsClient({
                 </td>
                 <td className="px-4 py-3 text-neutral-400">{b.seat_labels || "—"}</td>
                 <td className="px-4 py-3">{b.status}</td>
+                <td className="px-4 py-3">
+                  {b.checked_in_at ? (
+                    <span className="text-green-400">Admitted</span>
+                  ) : (
+                    <span className="text-neutral-500">Not yet</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
