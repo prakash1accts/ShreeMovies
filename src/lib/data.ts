@@ -262,6 +262,34 @@ export async function listAllShowtimes(): Promise<ShowtimeWithMovie[]> {
   return rows;
 }
 
+// Batch-computes, per showtime, how many paid seats have been admitted at
+// the door vs. how many were sold in total — shown as "X / Y admitted" on
+// the admin Showtimes list. One grouped query for all requested showtimes
+// (rather than one query per showtime) to avoid N+1 lookups, following the
+// same pattern as getVoteCountsForMovies below.
+export async function getAdmissionStatsForShowtimes(
+  showtimeIds: string[]
+): Promise<Record<string, { admitted: number; total: number }>> {
+  const result: Record<string, { admitted: number; total: number }> = {};
+  for (const id of showtimeIds) result[id] = { admitted: 0, total: 0 };
+  if (showtimeIds.length === 0) return result;
+
+  const { rows } = await query<{ showtime_id: string; total: string; admitted: string }>(
+    `SELECT b.showtime_id,
+            COUNT(bs.seat_id) as total,
+            COUNT(bs.seat_id) FILTER (WHERE b.checked_in_at IS NOT NULL) as admitted
+     FROM bookings b
+     JOIN booking_seats bs ON bs.booking_id = b.id
+     WHERE b.status = 'paid' AND b.showtime_id = ANY($1)
+     GROUP BY b.showtime_id`,
+    [showtimeIds]
+  );
+  for (const row of rows) {
+    result[row.showtime_id] = { admitted: Number(row.admitted), total: Number(row.total) };
+  }
+  return result;
+}
+
 // Only showtimes that haven't started yet — used for the admin "new
 // booking" screen so staff aren't selling tickets for a show that already
 // happened.
@@ -997,6 +1025,20 @@ export async function getBookingByReference(
     `${BOOKING_DETAILS_SELECT} WHERE b.booking_number = $1 OR b.id = $1 LIMIT 1`,
     [ref]
   );
+  return rows[0];
+}
+
+// Marks a paid booking as admitted at the door — tapped from the ticket
+// verification screen after staff scan the QR code. COALESCE means a second
+// tap (or a re-scan of an already-admitted ticket) never overwrites the
+// original admission time, so the running admitted count can't be inflated
+// by scanning the same ticket twice.
+export async function markBookingCheckedIn(bookingId: string): Promise<Booking> {
+  const { rows } = await query<Booking>(
+    "UPDATE bookings SET checked_in_at = COALESCE(checked_in_at, now()) WHERE id = $1 RETURNING *",
+    [bookingId]
+  );
+  if (!rows[0]) throw new Error("BOOKING_NOT_FOUND");
   return rows[0];
 }
 
