@@ -3,6 +3,7 @@
 import { useState } from "react";
 import QRCode from "qrcode";
 import type { BookingWithDetails } from "@/lib/data";
+import { formatVenueDateTime } from "@/lib/timezone";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -59,7 +60,7 @@ async function drawTicket(
 
   ctx.font = "19px Arial";
   ctx.fillStyle = "#d4d4d8";
-  ctx.fillText(new Date(booking.starts_at).toLocaleString(), 45, 195);
+  ctx.fillText(formatVenueDateTime(booking.starts_at), 45, 195);
 
   ctx.font = "19px Arial";
   ctx.fillStyle = "#d4d4d8";
@@ -147,11 +148,9 @@ export default function TicketButton({ booking }: { booking: BookingWithDetails 
     setLoading(false);
   }
 
-  const shareText = `Shree Movies ticket — ${booking.movie_title}, ${new Date(
+  const shareText = `Shree Movies ticket — ${booking.movie_title}, ${formatVenueDateTime(
     booking.starts_at
-  ).toLocaleString()}, Seats: ${booking.seat_labels || "—"}, Ref: ${
-    booking.booking_number || booking.id
-  }`;
+  )}, Seats: ${booking.seat_labels || "—"}, Ref: ${booking.booking_number || booking.id}`;
 
   return (
     <>
