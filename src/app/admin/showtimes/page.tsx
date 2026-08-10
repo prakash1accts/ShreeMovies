@@ -5,6 +5,7 @@ import {
   resyncShowtimeSeatsAction,
 } from "@/app/actions/admin";
 import {
+  getAdmissionStatsForShowtimes,
   getShowtimeSeatSyncStatus,
   listAllShowtimes,
   listMovies,
@@ -33,6 +34,10 @@ export default async function AdminShowtimesPage() {
     })
   );
 
+  // "X / Y admitted" per showtime, from ticket QR scans at the door — one
+  // batched query for every showtime on this page rather than one per row.
+  const admissionStats = await getAdmissionStatsForShowtimes(showtimes.map((st) => st.id));
+
   return (
     <div>
       <h1 className="text-2xl font-bold">Showtimes</h1>
@@ -46,6 +51,7 @@ export default async function AdminShowtimesPage() {
           const sync = syncStatuses[i];
           const outOfSync = sync ? !sync.inSync : false;
           const canResync = outOfSync && sync!.bookedOrHeldCount === 0;
+          const admission = admissionStats[st.id];
 
           return (
             <div
@@ -59,6 +65,11 @@ export default async function AdminShowtimesPage() {
                     {new Date(st.starts_at).toLocaleString()} · {st.screen_name} · AOA{" "}
                     {(st.price_cents / 100).toFixed(2)}
                   </div>
+                  {admission && admission.total > 0 && (
+                    <div className="mt-1 text-sm text-neutral-400">
+                      🎟️ {admission.admitted} / {admission.total} admitted
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Link
