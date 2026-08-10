@@ -8,9 +8,13 @@ type ActionState = { error?: string } | undefined;
 export default function AuthForm({
   mode,
   action,
+  next,
 }: {
   mode: "login" | "signup" | "setup";
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
+  // Where to send the user after a successful login — e.g. back to the
+  // ticket-verification page they scanned before being asked to log in.
+  next?: string;
 }) {
   const [state, formAction, isPending] = useActionState(action, undefined);
 
@@ -32,6 +36,7 @@ export default function AuthForm({
       </p>
 
       <form action={formAction} className="mt-6 space-y-4">
+        {mode === "login" && next && <input type="hidden" name="next" value={next} />}
         {(mode === "signup" || mode === "setup") && (
           <div>
             <label className="mb-1 block text-sm text-neutral-300">Name</label>
