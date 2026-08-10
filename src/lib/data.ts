@@ -60,6 +60,32 @@ export async function createUser(params: {
   return rows[0];
 }
 
+// Customer accounts for the admin Users list — name, email, phone, WhatsApp,
+// and block status, so an admin can see who has an account and shut off
+// abusive ones. Admin accounts are excluded; this list is for managing
+// customers, not other staff logins.
+export async function listCustomers(): Promise<User[]> {
+  const { rows } = await query<User>(
+    "SELECT * FROM users WHERE role = 'customer' ORDER BY created_at DESC"
+  );
+  return rows;
+}
+
+// Blocks or unblocks a customer account. A blocked user can't log in
+// (checked in loginAction) or place a new booking (checked in
+// bookSeatsAction) — but note this doesn't forcibly end an already-active
+// login session, since sessions here are self-contained JWTs with no
+// server-side revocation list; the block takes full effect the next time
+// they'd need to log in or book.
+export async function setUserBlocked(userId: string, blocked: boolean): Promise<User> {
+  const { rows } = await query<User>(
+    "UPDATE users SET is_blocked = $1 WHERE id = $2 RETURNING *",
+    [blocked, userId]
+  );
+  if (!rows[0]) throw new Error("USER_NOT_FOUND");
+  return rows[0];
+}
+
 // ---------- Movies ----------
 
 export async function listMovies(): Promise<Movie[]> {
