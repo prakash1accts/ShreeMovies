@@ -12,6 +12,7 @@ import {
   listScreens,
 } from "@/lib/data";
 import AdminShowtimeForm from "@/components/AdminShowtimeForm";
+import { formatVenueDateTime } from "@/lib/timezone";
 
 export default async function AdminShowtimesPage() {
   await ensureDefaultTheaterAndScreen();
@@ -62,7 +63,7 @@ export default async function AdminShowtimesPage() {
                 <div>
                   <div className="font-medium">{st.movie_title}</div>
                   <div className="text-sm text-neutral-500">
-                    {new Date(st.starts_at).toLocaleString()} · {st.screen_name} · AOA{" "}
+                    {formatVenueDateTime(st.starts_at)} · {st.screen_name} · AOA{" "}
                     {(st.price_cents / 100).toFixed(2)}
                   </div>
                   {admission && admission.total > 0 && (
