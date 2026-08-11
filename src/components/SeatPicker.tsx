@@ -9,12 +9,14 @@ export default function SeatPicker({
   showtimeId,
   seats,
   priceCents,
+  holdMinutes,
   isLoggedIn,
   returnTo,
 }: {
   showtimeId: string;
   seats: Seat[];
   priceCents: number;
+  holdMinutes: number;
   isLoggedIn: boolean;
   returnTo: string;
 }) {
@@ -150,6 +152,15 @@ export default function SeatPicker({
             <span>AOA {(total / 100).toFixed(2)}</span>
           </div>
         </div>
+
+        {selected.size > 0 && (
+          <p className="mt-3 text-xs text-amber-400">
+            Your selected seats will be held for {holdMinutes}{" "}
+            {holdMinutes === 1 ? "minute" : "minutes"} once you continue to checkout. If payment
+            isn&apos;t confirmed within that time, they&apos;re released automatically and may be
+            taken by someone else — so please complete payment promptly.
+          </p>
+        )}
 
         {state?.error && (
           <p className="mt-3 text-sm text-red-400">{state.error}</p>
