@@ -13,6 +13,32 @@ import type {
 } from "./types";
 
 // ---------- Users ----------
+// Attaches a walk-in/admin-entered booking (user_id currently null) to a
+// registered customer account, so it starts appearing on that customer's own
+// "My Bookings" page instead of only in the admin bookings list — e.g. when
+// an online customer's booking had to be recreated as a walk-in sale (a
+// screen change wiping and regenerating seats forces this) and the admin
+// wants to hand it back to the original account. Only allowed while the
+// booking has no user_id yet — an online booking already belongs to whoever
+// checked it out and shouldn't be silently reassigned to a different account
+// this way.
+export async function linkBookingToUser(bookingId: string, userId: string): Promise<Booking> {
+  const { rows } = await query<Booking>(
+    "UPDATE bookings SET user_id = $1 WHERE id = $2 AND user_id IS NULL RETURNING *",
+    [userId, bookingId]
+  );
+  if (!rows[0]) throw new Error("BOOKING_NOT_LINKABLE");
+  return rows[0];
+}
+
+
+
+
+
+
+
+
+
 
 export async function getUserByEmail(email: string): Promise<User | undefined> {
   const { rows } = await query<User>("SELECT * FROM users WHERE email = $1", [
