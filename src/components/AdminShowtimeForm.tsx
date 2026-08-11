@@ -100,6 +100,25 @@ export default function AdminShowtimeForm({
           className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
         />
       </div>
+      <div>
+        <label className="mb-1 block text-sm text-neutral-300">
+          Seat hold time (minutes)
+        </label>
+        <input
+          type="number"
+          step="1"
+          min={1}
+          name="holdMinutes"
+          defaultValue={showtime ? showtime.hold_minutes : 15}
+          className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
+        />
+        <p className="mt-1 text-xs text-neutral-500">
+          How long a selected seat stays reserved for this showtime before it&apos;s
+          automatically released back to the pool if payment isn&apos;t confirmed. Default is 15
+          — raise it for high-demand showtimes so customers have more time to complete a bank
+          transfer.
+        </p>
+      </div>
 
       {state?.error && (
         <p className="sm:col-span-2 text-sm text-red-400">{state.error}</p>
