@@ -158,6 +158,11 @@ export default async function AdminBookingsPage() {
                   {b.booking_number && (
                     <div className="mt-0.5 text-xs text-neutral-500">#{b.booking_number}</div>
                   )}
+                  {b.status === "cancelled" && b.cancel_reason && (
+                    <div className="mt-0.5 text-xs text-neutral-500" title={b.cancel_reason}>
+                      hold expired
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-neutral-500">
                   {formatVenueDateTime(b.created_at)}
