@@ -62,6 +62,9 @@ export default async function AccountPage() {
                 {b.seats_changed_note && (
                   <div className="mt-1 text-xs text-amber-400">⚠ {b.seats_changed_note}</div>
                 )}
+                {b.status === "cancelled" && b.cancel_reason && (
+                  <div className="mt-1 text-xs text-neutral-400">⚠ {b.cancel_reason}</div>
+                )}
               </div>
               <div className="text-right">
                 <div className="font-medium">AOA {(b.total_cents / 100).toFixed(2)}</div>
