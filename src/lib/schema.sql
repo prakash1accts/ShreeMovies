@@ -52,8 +52,14 @@ CREATE TABLE IF NOT EXISTS showtimes (
   movie_id TEXT NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
   screen_id TEXT NOT NULL REFERENCES screens(id) ON DELETE CASCADE,
   starts_at TIMESTAMPTZ NOT NULL,
-  price_cents INTEGER NOT NULL DEFAULT 1200
+  price_cents INTEGER NOT NULL DEFAULT 1200,
+  -- How long a seat stays 'held' for this showtime before it's automatically
+  -- released back to 'available' if payment isn't confirmed. Per-showtime
+  -- (not global) so a high-demand showtime can be given more breathing room
+  -- than the default without affecting every other showtime.
+  hold_minutes INTEGER NOT NULL DEFAULT 15
 );
+ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS hold_minutes INTEGER NOT NULL DEFAULT 15;
 
 -- One row per seat per showtime, created at showtime-creation time
 CREATE TABLE IF NOT EXISTS seats (
@@ -81,6 +87,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   payment_proof_url TEXT, -- photo/PDF of the transfer receipt, captured when admin confirms payment
   booking_number TEXT, -- human-friendly reference assigned on payment confirmation, e.g. "VISW161201"
   seats_changed_note TEXT, -- set when admin re-seats a paid booking, so the customer sees "seats changed" and knows to reprint
+  cancel_reason TEXT, -- set when a booking is cancelled automatically (e.g. seat hold expired before payment), so the customer sees why on "My Bookings" instead of just "cancelled"
   created_by_admin BOOLEAN NOT NULL DEFAULT false,
   checked_in_at TIMESTAMPTZ, -- set when staff tap "Admit" on the ticket-verification screen (QR scan at the door); null means not yet admitted
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -94,6 +101,7 @@ ALTER TABLE bookings ADD COLUMN IF NOT EXISTS deposit_date DATE;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS booking_number TEXT;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS seats_changed_note TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS created_by_admin BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ;
 
