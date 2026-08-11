@@ -58,6 +58,7 @@ export interface Showtime {
   screen_id: string;
   starts_at: string;
   price_cents: number;
+  hold_minutes: number;
 }
 
 export type SeatStatus = "available" | "held" | "booked";
@@ -88,6 +89,7 @@ export interface Booking {
   payment_proof_url: string | null;
   booking_number: string | null;
   seats_changed_note: string | null;
+  cancel_reason: string | null;
   created_by_admin: boolean;
   checked_in_at: string | null;
   created_at: string;
