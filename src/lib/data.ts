@@ -13,32 +13,6 @@ import type {
 } from "./types";
 
 // ---------- Users ----------
-// Attaches a walk-in/admin-entered booking (user_id currently null) to a
-// registered customer account, so it starts appearing on that customer's own
-// "My Bookings" page instead of only in the admin bookings list — e.g. when
-// an online customer's booking had to be recreated as a walk-in sale (a
-// screen change wiping and regenerating seats forces this) and the admin
-// wants to hand it back to the original account. Only allowed while the
-// booking has no user_id yet — an online booking already belongs to whoever
-// checked it out and shouldn't be silently reassigned to a different account
-// this way.
-export async function linkBookingToUser(bookingId: string, userId: string): Promise<Booking> {
-  const { rows } = await query<Booking>(
-    "UPDATE bookings SET user_id = $1 WHERE id = $2 AND user_id IS NULL RETURNING *",
-    [userId, bookingId]
-  );
-  if (!rows[0]) throw new Error("BOOKING_NOT_LINKABLE");
-  return rows[0];
-}
-
-
-
-
-
-
-
-
-
 
 export async function getUserByEmail(email: string): Promise<User | undefined> {
   const { rows } = await query<User>("SELECT * FROM users WHERE email = $1", [
@@ -397,14 +371,22 @@ export async function createShowtime(params: {
   screenId: string;
   startsAt: string;
   priceCents: number;
+  holdMinutes?: number;
 }): Promise<Showtime> {
   const id = genId("sht");
 
   return withTransaction(async (client) => {
     const { rows } = await clientQuery<Showtime>(
       client,
-      "INSERT INTO showtimes (id, movie_id, screen_id, starts_at, price_cents) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-      [id, params.movieId, params.screenId, params.startsAt, params.priceCents]
+      "INSERT INTO showtimes (id, movie_id, screen_id, starts_at, price_cents, hold_minutes) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+      [
+        id,
+        params.movieId,
+        params.screenId,
+        params.startsAt,
+        params.priceCents,
+        params.holdMinutes ?? 15,
+      ]
     );
 
     // Generate the seat grid for this showtime based on the screen's layout
@@ -438,6 +420,7 @@ export async function updateShowtime(params: {
   screenId: string;
   startsAt: string;
   priceCents: number;
+  holdMinutes?: number;
 }): Promise<{ error?: string }> {
   return withTransaction(async (client) => {
     const { rows: existingRows } = await clientQuery<Showtime>(
@@ -466,8 +449,15 @@ export async function updateShowtime(params: {
 
     await clientQuery(
       client,
-      "UPDATE showtimes SET movie_id = $1, screen_id = $2, starts_at = $3, price_cents = $4 WHERE id = $5",
-      [params.movieId, params.screenId, params.startsAt, params.priceCents, params.id]
+      "UPDATE showtimes SET movie_id = $1, screen_id = $2, starts_at = $3, price_cents = $4, hold_minutes = $5 WHERE id = $6",
+      [
+        params.movieId,
+        params.screenId,
+        params.startsAt,
+        params.priceCents,
+        params.holdMinutes ?? existing.hold_minutes ?? 15,
+        params.id,
+      ]
     );
 
     if (screenChanged) {
@@ -562,18 +552,78 @@ export async function resyncShowtimeSeats(showtimeId: string): Promise<void> {
 
 // ---------- Seats ----------
 
-const HOLD_EXPIRY_MINUTES = 15;
+// Fallback used only if a showtime row somehow has no hold_minutes (schema
+// default covers normal cases) — kept in sync with the column's DEFAULT 15
+// in schema.sql.
+const DEFAULT_HOLD_EXPIRY_MINUTES = 15;
 
-// Seats held for checkout longer than HOLD_EXPIRY_MINUTES go back to
-// 'available' automatically (no background job needed for this app's scale).
+const HOLD_EXPIRED_CANCEL_REASON =
+  "Automatically cancelled — the seat hold expired before payment was confirmed, so the seats were released back for others to book.";
+
+// Seats held for checkout longer than the showtime's own hold_minutes go
+// back to 'available' automatically (no background job needed for this
+// app's scale). Each showtime can have its own hold window — set via the
+// admin showtime form — instead of one fixed value for every showtime.
+//
+// The 'pending' booking that was holding those seats does NOT clean itself
+// up otherwise — it would sit in the admin's "Pending Payment Confirmation"
+// queue indefinitely even after its seats have quietly gone back into the
+// pool, and confirming it later would forcibly re-book seats that may have
+// since been sold to someone else. So this also cancels that booking (with
+// a customer-visible reason on "My Bookings") in the same pass, before the
+// seats themselves are released — the booking_seats join only works while
+// the seats are still marked 'held'.
 export async function releaseStaleHolds(showtimeId: string) {
-  await query(
-    `UPDATE seats SET status = 'available', held_at = NULL
-     WHERE showtime_id = $1 AND status = 'held'
-       AND held_at IS NOT NULL
-       AND held_at + INTERVAL '${HOLD_EXPIRY_MINUTES} minutes' < now()`,
-    [showtimeId]
-  );
+  await withTransaction(async (client) => {
+    const { rows: stRows } = await clientQuery<{ hold_minutes: number }>(
+      client,
+      "SELECT hold_minutes FROM showtimes WHERE id = $1",
+      [showtimeId]
+    );
+    const holdMinutes = stRows[0]?.hold_minutes ?? DEFAULT_HOLD_EXPIRY_MINUTES;
+
+    const { rows: staleBookingRows } = await clientQuery<{ booking_id: string }>(
+      client,
+      `SELECT DISTINCT bs.booking_id
+       FROM booking_seats bs
+       JOIN seats s ON s.id = bs.seat_id
+       JOIN bookings b ON b.id = bs.booking_id
+       WHERE s.showtime_id = $1 AND s.status = 'held' AND s.held_at IS NOT NULL
+         AND s.held_at + make_interval(mins => $2) < now()
+         AND b.status = 'pending'`,
+      [showtimeId, holdMinutes]
+    );
+    const staleBookingIds = staleBookingRows.map((r) => r.booking_id);
+
+    if (staleBookingIds.length > 0) {
+      await clientQuery(
+        client,
+        `UPDATE bookings SET status = 'cancelled', cancel_reason = $2 WHERE id = ANY($1)`,
+        [staleBookingIds, HOLD_EXPIRED_CANCEL_REASON]
+      );
+      // Release every seat belonging to these now-cancelled bookings — not
+      // just the individual seats that crossed the stale threshold — so a
+      // group booking is released as one unit rather than partially.
+      await clientQuery(
+        client,
+        `UPDATE seats SET status = 'available', held_at = NULL
+         WHERE id IN (SELECT seat_id FROM booking_seats WHERE booking_id = ANY($1))`,
+        [staleBookingIds]
+      );
+    }
+
+    // Catch-all: release any other stale 'held' seats on this showtime that
+    // aren't tied to a still-pending booking row (e.g. an orphaned hold left
+    // over from an admin-cancelled or otherwise already-resolved booking).
+    await clientQuery(
+      client,
+      `UPDATE seats SET status = 'available', held_at = NULL
+       WHERE showtime_id = $1 AND status = 'held'
+         AND held_at IS NOT NULL
+         AND held_at + make_interval(mins => $2) < now()`,
+      [showtimeId, holdMinutes]
+    );
+  });
 }
 
 export async function listSeatsForShowtime(showtimeId: string): Promise<Seat[]> {
@@ -1032,6 +1082,24 @@ export async function cancelBooking(bookingId: string) {
 
 export async function getBooking(id: string): Promise<Booking | undefined> {
   const { rows } = await query<Booking>("SELECT * FROM bookings WHERE id = $1", [id]);
+  return rows[0];
+}
+
+// Attaches a walk-in/admin-entered booking (user_id currently null) to a
+// registered customer account, so it starts appearing on that customer's own
+// "My Bookings" page instead of only in the admin bookings list — e.g. when
+// an online customer's booking had to be recreated as a walk-in sale (a
+// screen change wiping and regenerating seats forces this) and the admin
+// wants to hand it back to the original account. Only allowed while the
+// booking has no user_id yet — an online booking already belongs to whoever
+// checked it out and shouldn't be silently reassigned to a different account
+// this way.
+export async function linkBookingToUser(bookingId: string, userId: string): Promise<Booking> {
+  const { rows } = await query<Booking>(
+    "UPDATE bookings SET user_id = $1 WHERE id = $2 AND user_id IS NULL RETURNING *",
+    [userId, bookingId]
+  );
+  if (!rows[0]) throw new Error("BOOKING_NOT_LINKABLE");
   return rows[0];
 }
 
