@@ -14,6 +14,7 @@ import {
   deleteMovie,
   deleteScreen,
   deleteShowtime,
+  linkBookingToUser,
   listScreens,
   listTheaters,
   markBookingCheckedIn,
@@ -216,6 +217,9 @@ export async function createShowtimeAction(
   const date = String(formData.get("date") || "");
   const time = String(formData.get("time") || "");
   const price = Number(formData.get("price") || 12);
+  const holdMinutesRaw = Number(formData.get("holdMinutes"));
+  const holdMinutes =
+    Number.isFinite(holdMinutesRaw) && holdMinutesRaw > 0 ? Math.round(holdMinutesRaw) : 15;
 
   if (!movieId || !screenId || !date || !time) {
     return { error: "Please fill in all fields." };
@@ -231,6 +235,7 @@ export async function createShowtimeAction(
     screenId,
     startsAt: startsAt.toISOString(),
     priceCents: Math.round(price * 100),
+    holdMinutes,
   });
 
   revalidatePath("/admin/showtimes");
@@ -250,6 +255,9 @@ export async function updateShowtimeAction(
   const date = String(formData.get("date") || "");
   const time = String(formData.get("time") || "");
   const price = Number(formData.get("price") || 12);
+  const holdMinutesRaw = Number(formData.get("holdMinutes"));
+  const holdMinutes =
+    Number.isFinite(holdMinutesRaw) && holdMinutesRaw > 0 ? Math.round(holdMinutesRaw) : 15;
 
   if (!id) return { error: "Missing showtime id." };
   if (!movieId || !screenId || !date || !time) {
@@ -267,6 +275,7 @@ export async function updateShowtimeAction(
     screenId,
     startsAt: startsAt.toISOString(),
     priceCents: Math.round(price * 100),
+    holdMinutes,
   });
 
   if (result.error) return { error: result.error };
@@ -457,6 +466,26 @@ export async function editBookingSeatsAction(
   revalidatePath("/admin/bookings");
   revalidatePath("/account");
   redirect("/admin/bookings");
+}
+
+// Attaches a walk-in/admin-entered booking to a registered customer account
+// so it starts showing up on that customer's own "My Bookings" page. Silently
+// no-ops if the booking is already linked (e.g. double-submit) rather than
+// showing an error on a form with nowhere to display one.
+export async function linkBookingToUserAction(formData: FormData) {
+  await requireAdmin();
+  const bookingId = String(formData.get("bookingId") || "");
+  const userId = String(formData.get("userId") || "");
+  if (bookingId && userId) {
+    try {
+      await linkBookingToUser(bookingId, userId);
+    } catch {
+      // Already linked, or the booking no longer exists — nothing to do.
+    }
+  }
+  revalidatePath("/admin/bookings");
+  revalidatePath(`/admin/bookings/${bookingId}/edit`);
+  revalidatePath("/account");
 }
 
 // ---------- Ticket check-in (QR scan at the door) ----------
