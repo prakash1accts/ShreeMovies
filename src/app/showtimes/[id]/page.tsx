@@ -39,6 +39,7 @@ export default async function ShowtimePage({
         showtimeId={showtime.id}
         seats={seats}
         priceCents={showtime.price_cents}
+        holdMinutes={showtime.hold_minutes}
         isLoggedIn={Boolean(session)}
         returnTo={`/showtimes/${showtime.id}`}
       />
