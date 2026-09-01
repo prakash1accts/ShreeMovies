@@ -87,6 +87,21 @@ export async function setUserBlocked(userId: string, blocked: boolean): Promise<
   return rows[0];
 }
 
+// Lets an admin set a new password directly on a customer's account — for
+// when a customer forgets their password and calls/messages the theatre,
+// since there's no self-service "forgot password" email flow. The admin
+// picks (or generates) a new password and shares it with the customer
+// themselves; this only ever writes an already-hashed password, never a
+// plaintext one, to the database.
+export async function setUserPassword(userId: string, passwordHash: string): Promise<User> {
+  const { rows } = await query<User>(
+    "UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING *",
+    [passwordHash, userId]
+  );
+  if (!rows[0]) throw new Error("USER_NOT_FOUND");
+  return rows[0];
+}
+
 // ---------- Movies ----------
 
 export async function listMovies(): Promise<Movie[]> {
