@@ -932,13 +932,28 @@ export async function createAdminBooking(params: {
   });
 }
 
-// Lets an admin re-seat an existing booking (same ticket count, different
-// seats) — e.g. the customer asked to move, or the wrong seats were picked
-// at the box office. The booking's own current seats are always eligible
-// to "keep"; any other requested seat must be genuinely available.
+// Lets an admin re-seat an existing booking — e.g. the customer asked to
+// move, the wrong seats were picked at the box office, or the party size
+// itself changed (newSeatIds can be a different length than the booking's
+// current seats; nothing here requires the count to stay fixed). The
+// booking's own current seats are always eligible to "keep"; any other
+// requested seat must be genuinely available.
+//
+// `pricing`, when given, is applied in the same transaction as the seat
+// swap — used by the admin "Edit Booking" screen, which lets an admin
+// correct the price/payment terms for a booking alongside its seats in one
+// save. Left out (or omitted entirely) for callers that only ever touch
+// seats.
 export async function updateBookingSeats(
   bookingId: string,
-  newSeatIds: string[]
+  newSeatIds: string[],
+  pricing?: {
+    unitPriceCents: number;
+    totalCents: number;
+    paymentTerms: "cash" | "deposit";
+    depositReference: string | null;
+    depositDate: string | null;
+  }
 ): Promise<Booking> {
   return withTransaction(async (client) => {
     const { rows: bookingRows } = await clientQuery<Booking>(
@@ -1007,8 +1022,17 @@ export async function updateBookingSeats(
 
     // Only paid bookings already have a ticket in the customer's hands, so
     // only flag those — a note here tells the customer to reprint, without
-    // creating a second booking record or losing the original one.
-    if (booking.status === "paid") {
+    // creating a second booking record or losing the original one. Only
+    // written when the seats actually differ — this function is also called
+    // to save a price/payment-terms-only edit (same seats resubmitted), and
+    // that shouldn't spuriously tell the customer their seats changed.
+    const newSeatIdsSorted = [...newSeatIds].sort();
+    const oldSeatIdsSorted = [...oldSeatIds].sort();
+    const seatsActuallyChanged =
+      newSeatIdsSorted.length !== oldSeatIdsSorted.length ||
+      newSeatIdsSorted.some((id, i) => id !== oldSeatIdsSorted[i]);
+
+    if (booking.status === "paid" && seatsActuallyChanged) {
       const newSeatLabels = newSeats
         .map((s) => `${s.row_label}${s.col_number}`)
         .sort()
@@ -1019,6 +1043,26 @@ export async function updateBookingSeats(
         note,
         bookingId,
       ]);
+    }
+
+    if (pricing) {
+      await client.query(
+        `UPDATE bookings
+         SET unit_price_cents = $1,
+             total_cents = $2,
+             payment_terms = $3,
+             deposit_reference = $4,
+             deposit_date = $5
+         WHERE id = $6`,
+        [
+          pricing.unitPriceCents,
+          pricing.totalCents,
+          pricing.paymentTerms,
+          pricing.depositReference,
+          pricing.depositDate,
+          bookingId,
+        ]
+      );
     }
 
     const { rows } = await clientQuery<Booking>(
