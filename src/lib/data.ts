@@ -1,6 +1,7 @@
 import { clientQuery, genId, query, withTransaction } from "./db";
 import type {
   Booking,
+  BookingStatus,
   Movie,
   MovieVoteCounts,
   Screen,
@@ -630,6 +631,42 @@ export async function listSeatsForShowtime(showtimeId: string): Promise<Seat[]> 
   await releaseStaleHolds(showtimeId);
   const { rows } = await query<Seat>(
     "SELECT * FROM seats WHERE showtime_id = $1 ORDER BY row_label ASC, col_number ASC",
+    [showtimeId]
+  );
+  return rows;
+}
+
+// A seat plus who (if anyone) currently holds/booked it — powers the admin
+// "seat map" view so staff can see the actual booking layout for a showtime
+// (who's in which seat) instead of just a flat list of bookings with a text
+// seat-label string. booking_status excludes 'cancelled' bookings (their
+// seats are already back to 'available' by the time this is read, but the
+// join is scoped defensively in case a cancellation and a re-read race).
+export interface AdminSeatMapSeat extends Seat {
+  booking_id: string | null;
+  booking_number: string | null;
+  booking_status: BookingStatus | null;
+  checked_in_at: string | null;
+  customer_name: string | null;
+}
+
+export async function getAdminSeatMapForShowtime(
+  showtimeId: string
+): Promise<AdminSeatMapSeat[]> {
+  await releaseStaleHolds(showtimeId);
+  const { rows } = await query<AdminSeatMapSeat>(
+    `SELECT s.*,
+            b.id as booking_id,
+            b.booking_number as booking_number,
+            b.status as booking_status,
+            b.checked_in_at as checked_in_at,
+            COALESCE(b.customer_name, u.name) as customer_name
+     FROM seats s
+     LEFT JOIN booking_seats bs ON bs.seat_id = s.id
+     LEFT JOIN bookings b ON b.id = bs.booking_id AND b.status <> 'cancelled'
+     LEFT JOIN users u ON u.id = b.user_id
+     WHERE s.showtime_id = $1
+     ORDER BY s.row_label ASC, s.col_number ASC`,
     [showtimeId]
   );
   return rows;
