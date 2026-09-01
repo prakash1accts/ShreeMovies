@@ -41,11 +41,14 @@ const screen4: ScreenLayout = {
 };
 
 // ---------- Screen 6 ----------
-// 12 rows (A front -> N back), up to 24 seats across.
+// 13 rows (A front -> O back), up to 24 seats across. Row O is the back-most
+// row and, unlike the rows in front of it, runs continuously across all 24
+// seats with no center gap. Row B has a big center gap (3-6 on the left,
+// 18-21 on the right).
 const screen6: ScreenLayout = {
   rows: [
     { label: "A", seatNumbers: range(3, 21) },
-    { label: "B", seatNumbers: range(3, 6) },
+    { label: "B", seatNumbers: [...range(3, 6), ...range(18, 21)] },
     { label: "C", seatNumbers: range(8, 14) },
     { label: "D", seatNumbers: range(3, 18) },
     { label: "E", seatNumbers: range(3, 18) },
@@ -56,6 +59,7 @@ const screen6: ScreenLayout = {
     { label: "L", seatNumbers: range(3, 18) },
     { label: "M", seatNumbers: [...range(3, 18), ...range(22, 24)] },
     { label: "N", seatNumbers: [...range(3, 18), ...range(22, 24)] },
+    { label: "O", seatNumbers: range(1, 24) },
   ],
 };
 
