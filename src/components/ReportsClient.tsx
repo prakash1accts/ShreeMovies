@@ -44,12 +44,22 @@ export default function ReportsClient({
   showtimes: ShowtimeWithMovie[];
 }) {
   const [showtimeId, setShowtimeId] = useState<string>("");
-  const [printMode, setPrintMode] = useState<"audience" | "security" | null>(null);
+  const [absenteeShowtimeId, setAbsenteeShowtimeId] = useState<string>("");
+  const [printMode, setPrintMode] = useState<"audience" | "security" | "absentee" | null>(null);
 
   const paidBookings = useMemo(() => bookings.filter((b) => b.status === "paid"), [bookings]);
   const securityRows = useMemo(
     () => paidBookings.filter((b) => !showtimeId || b.showtime_id === showtimeId),
     [paidBookings, showtimeId]
+  );
+  // Paid, but never scanned in at the door — the people to follow up with
+  // after a show so staff know who to call about a no-show seat.
+  const absenteeRows = useMemo(
+    () =>
+      paidBookings.filter(
+        (b) => !b.checked_in_at && (!absenteeShowtimeId || b.showtime_id === absenteeShowtimeId)
+      ),
+    [paidBookings, absenteeShowtimeId]
   );
 
   function exportAudienceCSV() {
@@ -88,6 +98,20 @@ export default function ReportsClient({
     downloadText("security-checkin-report.csv", toCSV([header, ...rows]));
   }
 
+  function exportAbsenteeCSV() {
+    const header = ["Customer", "Phone", "WhatsApp", "Seats", "Booking Ref", "Movie", "Showtime"];
+    const rows = absenteeRows.map((b) => [
+      b.customer_name || "—",
+      b.account_phone || "",
+      b.account_whatsapp || "",
+      b.seat_labels || "",
+      b.booking_number || b.id,
+      b.movie_title,
+      formatVenueDateTime(b.starts_at),
+    ]);
+    downloadText("absentee-report.csv", toCSV([header, ...rows]));
+  }
+
   function printAudience() {
     setPrintMode("audience");
     setTimeout(() => window.print(), 50);
@@ -95,6 +119,11 @@ export default function ReportsClient({
 
   function printSecurity() {
     setPrintMode("security");
+    setTimeout(() => window.print(), 50);
+  }
+
+  function printAbsentee() {
+    setPrintMode("absentee");
     setTimeout(() => window.print(), 50);
   }
 
@@ -157,6 +186,79 @@ export default function ReportsClient({
         </div>
       </section>
 
+      <section className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900 p-5 print:hidden">
+        <h2 className="font-semibold">Absentee report</h2>
+        <p className="mt-1 text-sm text-neutral-400">
+          Paid bookings for a showtime whose ticket was never scanned at the door — the people to
+          call or WhatsApp about a no-show seat. Best run once the showtime's admission window has
+          closed; pick the specific show below.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <select
+            value={absenteeShowtimeId}
+            onChange={(e) => setAbsenteeShowtimeId(e.target.value)}
+            className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
+          >
+            <option value="">All showtimes</option>
+            {showtimes.map((st) => (
+              <option key={st.id} value={st.id}>
+                {st.movie_title} — {formatVenueDateTime(st.starts_at)}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={exportAbsenteeCSV}
+            className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-200 hover:bg-neutral-700"
+          >
+            Download CSV
+          </button>
+          <button
+            onClick={printAbsentee}
+            className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-200 hover:bg-neutral-700"
+          >
+            Print / Save as PDF
+          </button>
+          <span className="text-sm text-neutral-500">
+            {absenteeRows.length} absent{absenteeRows.length === 1 ? "" : "ees"}
+          </span>
+        </div>
+        <div className="mt-4 overflow-x-auto rounded-md border border-neutral-800">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-neutral-950 text-neutral-400">
+              <tr>
+                <th className="px-3 py-2">Customer</th>
+                <th className="px-3 py-2">Phone</th>
+                <th className="px-3 py-2">WhatsApp</th>
+                <th className="px-3 py-2">Seats</th>
+                <th className="px-3 py-2">Booking Ref</th>
+              </tr>
+            </thead>
+            <tbody>
+              {absenteeRows.map((b) => (
+                <tr key={b.id} className="border-t border-neutral-800">
+                  <td className="px-3 py-2">{b.customer_name || "—"}</td>
+                  <td className="px-3 py-2 text-neutral-400">{b.account_phone || "—"}</td>
+                  <td className="px-3 py-2 text-neutral-400">{b.account_whatsapp || "—"}</td>
+                  <td className="px-3 py-2 text-neutral-400">{b.seat_labels || "—"}</td>
+                  <td className="px-3 py-2 text-neutral-500">
+                    #{b.booking_number || b.id}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {absenteeRows.length === 0 && (
+            <div className="p-4 text-center text-sm text-neutral-500">
+              Nobody paid is missing a check-in for this selection.
+            </div>
+          )}
+        </div>
+        <p className="mt-2 text-xs text-neutral-500">
+          Phone/WhatsApp is only on file for bookings placed by a registered account — walk-in /
+          box-office sales won&apos;t have a number here unless one was noted elsewhere.
+        </p>
+      </section>
+
       {/* Printable security report — only rendered into the print output when
           "Print / Save as PDF" was clicked from that section. */}
       <div className={`mt-8 ${printMode === "security" ? "hidden print:block" : "hidden"}`}>
@@ -182,6 +284,42 @@ export default function ReportsClient({
                 <td className="py-1">{b.customer_name || "—"}</td>
                 <td className="py-1">{(b.seat_labels || "").split(",").filter(Boolean).length}</td>
                 <td className="py-1">{b.seat_labels || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Printable absentee report */}
+      <div className={`mt-8 ${printMode === "absentee" ? "hidden print:block" : "hidden"}`}>
+        <h2 className="text-lg font-bold text-black">Absentee Report</h2>
+        <p className="text-sm text-neutral-700">
+          {absenteeShowtimeId
+            ? showtimes.find((s) => s.id === absenteeShowtimeId)?.movie_title +
+              " — " +
+              formatVenueDateTime(
+                showtimes.find((s) => s.id === absenteeShowtimeId)?.starts_at ?? ""
+              )
+            : "All showtimes"}
+        </p>
+        <table className="mt-3 w-full border-collapse text-sm text-black">
+          <thead>
+            <tr className="border-b border-black">
+              <th className="py-1 text-left">Customer</th>
+              <th className="py-1 text-left">Phone</th>
+              <th className="py-1 text-left">WhatsApp</th>
+              <th className="py-1 text-left">Seats</th>
+              <th className="py-1 text-left">Booking Ref</th>
+            </tr>
+          </thead>
+          <tbody>
+            {absenteeRows.map((b) => (
+              <tr key={b.id} className="border-b border-neutral-400">
+                <td className="py-1">{b.customer_name || "—"}</td>
+                <td className="py-1">{b.account_phone || "—"}</td>
+                <td className="py-1">{b.account_whatsapp || "—"}</td>
+                <td className="py-1">{b.seat_labels || "—"}</td>
+                <td className="py-1">#{b.booking_number || b.id}</td>
               </tr>
             ))}
           </tbody>
