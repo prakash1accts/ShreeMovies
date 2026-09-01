@@ -98,49 +98,81 @@ export default function ReportsClient({
     [paidBookings, absenteeShowtimeId]
   );
 
-  // Audience report footer totals — ticket count and revenue across every
-  // booking shown (all statuses, per the report's own "every status" scope).
+  // The audience report still lists every status (so a cancellation is
+  // visible in context), but a cancelled booking's seats were released and
+  // never actually sold — so its tickets/revenue must not inflate the Grand
+  // total. Everything else (paid, pending) still counts.
   const audienceTotals = useMemo(
     () =>
-      sortedBookings.reduce(
-        (acc, b) => ({
-          tickets: acc.tickets + ticketCount(b),
-          cents: acc.cents + b.total_cents,
-        }),
-        { tickets: 0, cents: 0 }
-      ),
+      sortedBookings
+        .filter((b) => b.status !== "cancelled")
+        .reduce(
+          (acc, b) => ({
+            tickets: acc.tickets + ticketCount(b),
+            cents: acc.cents + b.total_cents,
+          }),
+          { tickets: 0, cents: 0 }
+        ),
+    [sortedBookings]
+  );
+
+  // Groups the audience report by movie + showtime so that pair is shown
+  // once as a section heading instead of being repeated on every row. Built
+  // from sortedBookings, so each group's rows stay in ascending Booking Ref
+  // order and groups themselves appear in that same order.
+  const audienceGroups = useMemo(() => {
+    const map = new Map<string, { movieTitle: string; startsAt: string; rows: BookingWithDetails[] }>();
+    for (const b of sortedBookings) {
+      const key = `${b.movie_title}|${b.starts_at}`;
+      if (!map.has(key)) map.set(key, { movieTitle: b.movie_title, startsAt: b.starts_at, rows: [] });
+      map.get(key)!.rows.push(b);
+    }
+    return Array.from(map.values());
+  }, [sortedBookings]);
+
+  // Bookings that were edited after the fact (seats and/or ticket count
+  // changed post-payment) — flagged with an asterisk next to the name in the
+  // audience report, with the actual note explaining what changed listed
+  // once below the report.
+  const changedBookings = useMemo(
+    () => sortedBookings.filter((b) => b.seats_changed_note),
     [sortedBookings]
   );
 
   function exportAudienceCSV() {
-    const header = [
-      "Customer",
-      "Movie",
-      "Showtime",
-      "Seats",
-      "No. of Tickets",
-      "Total",
-      "Payment",
-      "Status",
-      "Attendance",
-      "Booked At",
-    ];
-    const rows = sortedBookings.map((b) => [
-      b.customer_name || "",
-      b.movie_title,
-      formatVenueDateTime(b.starts_at),
-      b.seat_labels || "",
-      String(ticketCount(b)),
-      (b.total_cents / 100).toFixed(2),
-      b.payment_terms || "",
-      b.status,
-      attendanceLabel(b),
-      formatVenueDateTime(b.created_at),
-    ]);
-    const totalsRow = [
-      "Grand total",
-      "",
-      "",
+    // Movie + showtime are written once as a section line ahead of each
+    // group's own header/rows, rather than repeated on every row.
+    const out: string[][] = [];
+    for (const group of audienceGroups) {
+      out.push([`${group.movieTitle} — ${formatVenueDateTime(group.startsAt)}`]);
+      out.push([
+        "Customer",
+        "Seats",
+        "No. of Tickets",
+        "Total",
+        "Payment",
+        "Status",
+        "Attendance",
+        "Booked At",
+        "Notes",
+      ]);
+      for (const b of group.rows) {
+        out.push([
+          b.customer_name || "",
+          b.seat_labels || "",
+          String(ticketCount(b)),
+          (b.total_cents / 100).toFixed(2),
+          b.payment_terms || "",
+          b.status,
+          attendanceLabel(b),
+          formatVenueDateTime(b.created_at),
+          b.seats_changed_note || "",
+        ]);
+      }
+      out.push([]);
+    }
+    out.push([
+      "Grand total (excludes cancelled bookings)",
       "",
       String(audienceTotals.tickets),
       (audienceTotals.cents / 100).toFixed(2),
@@ -148,8 +180,9 @@ export default function ReportsClient({
       "",
       "",
       "",
-    ];
-    downloadText("audience-report.csv", toCSV([header, ...rows, totalsRow]));
+      "",
+    ]);
+    downloadText("audience-report.csv", toCSV(out));
   }
 
   function exportSecurityCSV() {
@@ -390,103 +423,141 @@ export default function ReportsClient({
         </table>
       </div>
 
-      {/* Printable audience report */}
+      {/* Printable audience report — grouped by movie + showtime so that
+          pair is shown once as a section heading instead of on every row. */}
       <div className={`mt-8 ${printMode === "audience" ? "hidden print:block" : "hidden"}`}>
         <h2 className="text-lg font-bold text-black">Audience Report</h2>
-        <table className="mt-3 w-full border-collapse text-sm text-black">
-          <thead>
-            <tr className="border-b border-black">
-              <th className="py-1 text-left">Customer</th>
-              <th className="py-1 text-left">Movie</th>
-              <th className="py-1 text-left">Showtime</th>
-              <th className="py-1 text-left">Seats</th>
-              <th className="py-1 text-left">No. of Tickets</th>
-              <th className="py-1 text-left">Total</th>
-              <th className="py-1 text-left">Status</th>
-              <th className="py-1 text-left">Attendance</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedBookings.map((b) => (
-              <tr key={b.id} className="border-b border-neutral-400">
-                <td className="py-1">{b.customer_name || "—"}</td>
-                <td className="py-1">{b.movie_title}</td>
-                <td className="py-1">{formatVenueDateTime(b.starts_at)}</td>
-                <td className="py-1">{b.seat_labels || "—"}</td>
-                <td className="py-1">{ticketCount(b)}</td>
-                <td className="py-1">AOA {(b.total_cents / 100).toFixed(2)}</td>
-                <td className="py-1">{b.status}</td>
-                <td className="py-1">{attendanceLabel(b)}</td>
-              </tr>
+        {audienceGroups.map((group) => (
+          <div key={`${group.movieTitle}|${group.startsAt}`} className="mt-4">
+            <h3 className="text-sm font-semibold text-black">
+              {group.movieTitle} — {formatVenueDateTime(group.startsAt)}
+            </h3>
+            <table className="mt-1 w-full border-collapse text-sm text-black">
+              <thead>
+                <tr className="border-b border-black">
+                  <th className="py-1 text-left">Customer</th>
+                  <th className="py-1 text-left">Seats</th>
+                  <th className="py-1 text-left">No. of Tickets</th>
+                  <th className="py-1 text-left">Total (AOA)</th>
+                  <th className="py-1 text-left">Status</th>
+                  <th className="py-1 text-left">Attendance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.rows.map((b) => (
+                  <tr
+                    key={b.id}
+                    className={`border-b border-neutral-400 ${
+                      b.status === "cancelled" ? "text-red-600 line-through" : ""
+                    }`}
+                  >
+                    <td className="py-1">
+                      {b.customer_name || "—"}
+                      {b.seats_changed_note && <sup>*</sup>}
+                    </td>
+                    <td className="py-1">{b.seat_labels || "—"}</td>
+                    <td className="py-1">{ticketCount(b)}</td>
+                    <td className="py-1">{(b.total_cents / 100).toFixed(2)}</td>
+                    <td className="py-1">{b.status}</td>
+                    <td className="py-1">{attendanceLabel(b)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+        <div className="mt-3 flex items-center justify-between border-t-2 border-black pt-2 text-sm font-semibold text-black">
+          <span>Grand total (excludes cancelled bookings)</span>
+          <span>
+            {audienceTotals.tickets} tickets · AOA {(audienceTotals.cents / 100).toFixed(2)}
+          </span>
+        </div>
+        {changedBookings.length > 0 && (
+          <div className="mt-3 space-y-0.5 text-xs text-neutral-700">
+            {changedBookings.map((b) => (
+              <p key={b.id}>
+                * {b.customer_name || b.booking_number || b.id}: {b.seats_changed_note}
+              </p>
             ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-black font-semibold">
-              <td className="py-1" colSpan={4}>
-                Grand total
-              </td>
-              <td className="py-1">{audienceTotals.tickets}</td>
-              <td className="py-1">AOA {(audienceTotals.cents / 100).toFixed(2)}</td>
-              <td className="py-1" colSpan={2}></td>
-            </tr>
-          </tfoot>
-        </table>
+          </div>
+        )}
       </div>
 
-      {/* On-screen reference table */}
-      <div className="mt-8 overflow-x-auto rounded-lg border border-neutral-800 print:hidden">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-neutral-900 text-neutral-400">
-            <tr>
-              <th className="px-4 py-3">Customer</th>
-              <th className="px-4 py-3">Movie</th>
-              <th className="px-4 py-3">Showtime</th>
-              <th className="px-4 py-3">Seats</th>
-              <th className="px-4 py-3">No. of Tickets</th>
-              <th className="px-4 py-3">Total</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Attendance</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedBookings.map((b) => (
-              <tr key={b.id} className="border-t border-neutral-800">
-                <td className="px-4 py-3">{b.customer_name || "—"}</td>
-                <td className="px-4 py-3">{b.movie_title}</td>
-                <td className="px-4 py-3 text-neutral-400">
-                  {formatVenueDateTime(b.starts_at)}
-                </td>
-                <td className="px-4 py-3 text-neutral-400">{b.seat_labels || "—"}</td>
-                <td className="px-4 py-3 text-neutral-400">{ticketCount(b)}</td>
-                <td className="px-4 py-3 text-neutral-400">
-                  AOA {(b.total_cents / 100).toFixed(2)}
-                </td>
-                <td className="px-4 py-3">{b.status}</td>
-                <td className="px-4 py-3">
-                  {b.checked_in_at ? (
-                    <span className="text-green-400">Admitted</span>
-                  ) : (
-                    <span className="text-neutral-500">Not yet</span>
-                  )}
-                </td>
-              </tr>
+      {/* On-screen reference table (Audience report) — grouped by movie +
+          showtime, shown once per group as a heading rather than repeated
+          on every row. */}
+      <div className="mt-8 space-y-6 print:hidden">
+        {audienceGroups.map((group) => (
+          <div
+            key={`${group.movieTitle}|${group.startsAt}`}
+            className="overflow-x-auto rounded-lg border border-neutral-800"
+          >
+            <div className="border-b border-neutral-800 bg-neutral-900 px-4 py-2 text-sm font-semibold text-neutral-200">
+              {group.movieTitle} — {formatVenueDateTime(group.startsAt)}
+            </div>
+            <table className="w-full text-left text-sm">
+              <thead className="bg-neutral-900 text-neutral-400">
+                <tr>
+                  <th className="px-4 py-3">Customer</th>
+                  <th className="px-4 py-3">Seats</th>
+                  <th className="px-4 py-3">No. of Tickets</th>
+                  <th className="px-4 py-3">Total (AOA)</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Attendance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.rows.map((b) => (
+                  <tr
+                    key={b.id}
+                    className={`border-t border-neutral-800 ${
+                      b.status === "cancelled" ? "text-red-500 line-through" : ""
+                    }`}
+                  >
+                    <td className="px-4 py-3">
+                      {b.customer_name || "—"}
+                      {b.seats_changed_note && <sup>*</sup>}
+                    </td>
+                    <td className="px-4 py-3 text-neutral-400">{b.seat_labels || "—"}</td>
+                    <td className="px-4 py-3 text-neutral-400">{ticketCount(b)}</td>
+                    <td className="px-4 py-3 text-neutral-400">
+                      {(b.total_cents / 100).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3">{b.status}</td>
+                    <td className="px-4 py-3">
+                      {b.checked_in_at ? (
+                        <span className="text-green-400">Admitted</span>
+                      ) : (
+                        <span className="text-neutral-500">Not yet</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+        {sortedBookings.length > 0 && (
+          <div className="flex items-center justify-between rounded-md border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm font-semibold text-neutral-200">
+            <span>Grand total (excludes cancelled bookings)</span>
+            <span>
+              {audienceTotals.tickets} tickets · AOA {(audienceTotals.cents / 100).toFixed(2)}
+            </span>
+          </div>
+        )}
+        {changedBookings.length > 0 && (
+          <div className="space-y-0.5 text-xs text-neutral-500">
+            {changedBookings.map((b) => (
+              <p key={b.id}>
+                * {b.customer_name || b.booking_number || b.id}: {b.seats_changed_note}
+              </p>
             ))}
-          </tbody>
-          {sortedBookings.length > 0 && (
-            <tfoot>
-              <tr className="border-t border-neutral-700 font-semibold text-neutral-200">
-                <td className="px-4 py-3" colSpan={4}>
-                  Grand total
-                </td>
-                <td className="px-4 py-3">{audienceTotals.tickets}</td>
-                <td className="px-4 py-3">AOA {(audienceTotals.cents / 100).toFixed(2)}</td>
-                <td className="px-4 py-3" colSpan={2}></td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
+          </div>
+        )}
         {sortedBookings.length === 0 && (
-          <div className="p-6 text-center text-neutral-400">No bookings yet.</div>
+          <div className="rounded-lg border border-neutral-800 p-6 text-center text-neutral-400">
+            No bookings yet.
+          </div>
         )}
       </div>
     </div>
