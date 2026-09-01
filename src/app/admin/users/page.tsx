@@ -1,4 +1,4 @@
-import { blockUserAction, unblockUserAction } from "@/app/actions/admin";
+import { blockUserAction, resetUserPasswordAction, unblockUserAction } from "@/app/actions/admin";
 import { listCustomers } from "@/lib/data";
 
 export default async function AdminUsersPage() {
@@ -9,7 +9,7 @@ export default async function AdminUsersPage() {
       <h1 className="text-2xl font-bold">Users</h1>
       <p className="mt-1 text-neutral-400">
         Every customer account — name, email, phone, and WhatsApp — with the option to block an
-        account if it's necessary.
+        account, or reset their password if they've forgotten it and contacted you directly.
       </p>
 
       <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-800">
@@ -47,21 +47,41 @@ export default async function AdminUsersPage() {
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  {u.is_blocked ? (
-                    <form action={unblockUserAction}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {u.is_blocked ? (
+                      <form action={unblockUserAction}>
+                        <input type="hidden" name="id" value={u.id} />
+                        <button className="rounded-md bg-neutral-800 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700">
+                          Unblock
+                        </button>
+                      </form>
+                    ) : (
+                      <form action={blockUserAction}>
+                        <input type="hidden" name="id" value={u.id} />
+                        <button className="rounded-md bg-neutral-800 px-3 py-1.5 text-xs text-red-300 hover:bg-red-900/50">
+                          Block
+                        </button>
+                      </form>
+                    )}
+                    <form
+                      action={resetUserPasswordAction}
+                      className="flex items-center gap-1.5"
+                    >
                       <input type="hidden" name="id" value={u.id} />
+                      <input
+                        type="password"
+                        name="newPassword"
+                        placeholder="New password"
+                        required
+                        minLength={6}
+                        title="At least 6 characters"
+                        className="w-32 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-200 outline-none focus:border-red-500"
+                      />
                       <button className="rounded-md bg-neutral-800 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700">
-                        Unblock
+                        Reset password
                       </button>
                     </form>
-                  ) : (
-                    <form action={blockUserAction}>
-                      <input type="hidden" name="id" value={u.id} />
-                      <button className="rounded-md bg-neutral-800 px-3 py-1.5 text-xs text-red-300 hover:bg-red-900/50">
-                        Block
-                      </button>
-                    </form>
-                  )}
+                  </div>
                 </td>
               </tr>
             ))}
