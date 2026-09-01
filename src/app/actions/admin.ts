@@ -441,9 +441,12 @@ export async function cancelBookingAction(formData: FormData) {
   revalidatePath("/account");
 }
 
-// Re-seats an existing booking to a different set of seats (same ticket
-// count) — e.g. fixing a mis-picked seat at the box office.
-export async function editBookingSeatsAction(
+// Edits an existing booking's seats (any new ticket count — not just a
+// swap), price per ticket, and payment terms all in one save — e.g. fixing
+// a mis-picked seat at the box office, correcting a price that was entered
+// wrong, or adding/removing a ticket from the party. Mirrors
+// createAdminBookingAction's own validation rules for price/payment terms.
+export async function editBookingDetailsAction(
   _prevState: { error?: string } | undefined,
   formData: FormData
 ) {
@@ -451,17 +454,36 @@ export async function editBookingSeatsAction(
 
   const bookingId = String(formData.get("bookingId") || "");
   const seatIds = formData.getAll("seatIds").map(String);
+  const unitPrice = Number(formData.get("unitPrice") || 0);
+  const paymentTerms = String(formData.get("paymentTerms") || "cash") as "cash" | "deposit";
+  const depositReference = String(formData.get("depositReference") || "").trim();
+  const depositDate = String(formData.get("depositDate") || "").trim();
 
   if (!bookingId) return { error: "Missing booking id." };
-  if (seatIds.length === 0) return { error: "Please select seats." };
+  if (seatIds.length === 0) return { error: "Please select at least one seat." };
+  if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+    return { error: "Price must be a valid number." };
+  }
+  if (paymentTerms === "deposit" && !depositReference) {
+    return { error: "Deposit reference is required when payment terms is Deposit." };
+  }
+
+  const unitPriceCents = Math.round(unitPrice * 100);
+  const totalCents = unitPriceCents * seatIds.length;
 
   try {
-    await updateBookingSeats(bookingId, seatIds);
+    await updateBookingSeats(bookingId, seatIds, {
+      unitPriceCents,
+      totalCents,
+      paymentTerms,
+      depositReference: paymentTerms === "deposit" ? depositReference : null,
+      depositDate: paymentTerms === "deposit" ? depositDate || null : null,
+    });
   } catch (err) {
     if (err instanceof Error && err.message === "SEATS_UNAVAILABLE") {
       return { error: "One or more selected seats are already taken. Please pick again." };
     }
-    return { error: "Could not update seats. Please try again." };
+    return { error: "Could not update the booking. Please try again." };
   }
 
   revalidatePath("/admin/bookings");
