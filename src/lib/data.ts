@@ -655,6 +655,16 @@ export async function getAdminSeatMapForShowtime(
 ): Promise<AdminSeatMapSeat[]> {
   await releaseStaleHolds(showtimeId);
   const { rows } = await query<AdminSeatMapSeat>(
+    // A seat can accumulate more than one booking_seats row over its life —
+    // cancelling a booking (including the automatic hold-expiry cancel)
+    // never deletes its booking_seats rows, only updates the booking's own
+    // status — so a seat that was once held-then-released still carries a
+    // stale row pointing at that cancelled booking, alongside a fresh row
+    // for whoever holds/booked it now. Joining booking_seats directly would
+    // pick up every one of those rows and duplicate the seat in the result
+    // (once per historical booking). The subquery below keeps only
+    // non-cancelled bookings before the join, so at most one — the current
+    // one — ever matches.
     `SELECT s.*,
             b.id as booking_id,
             b.booking_number as booking_number,
@@ -662,8 +672,12 @@ export async function getAdminSeatMapForShowtime(
             b.checked_in_at as checked_in_at,
             COALESCE(b.customer_name, u.name) as customer_name
      FROM seats s
-     LEFT JOIN booking_seats bs ON bs.seat_id = s.id
-     LEFT JOIN bookings b ON b.id = bs.booking_id AND b.status <> 'cancelled'
+     LEFT JOIN (
+       SELECT bs.seat_id, bs.booking_id
+       FROM booking_seats bs
+       JOIN bookings b2 ON b2.id = bs.booking_id AND b2.status <> 'cancelled'
+     ) cur ON cur.seat_id = s.id
+     LEFT JOIN bookings b ON b.id = cur.booking_id
      LEFT JOIN users u ON u.id = b.user_id
      WHERE s.showtime_id = $1
      ORDER BY s.row_label ASC, s.col_number ASC`,
