@@ -36,6 +36,31 @@ function attendanceLabel(b: BookingWithDetails): string {
   return b.checked_in_at ? "Admitted" : "Not yet";
 }
 
+// Every seat-swap/seat-count edit keeps seat_labels as the source of truth for
+// how many seats a booking actually holds, so ticket counts everywhere in the
+// reports derive from it rather than from a separately-stored count that
+// could drift out of sync.
+function ticketCount(b: BookingWithDetails): number {
+  return (b.seat_labels || "").split(",").filter(Boolean).length;
+}
+
+// Sorts ascending by the human-friendly Booking Ref (e.g. "MIRZ061112") so
+// every report reads in the same predictable order the front desk expects,
+// instead of the newest-booking-first order the underlying query returns.
+// Plain string comparison is enough — the ref format keeps its parts (movie
+// letters, day, hour, per-showtime sequence) fixed-width, so alphabetical
+// order matches numeric order within each of those grouped positions. A
+// booking that hasn't been assigned a ref yet (only ever pending/cancelled
+// bookings that never got paid) sorts after every booking that has one.
+function compareByBookingRef(a: BookingWithDetails, b: BookingWithDetails): number {
+  const refA = a.booking_number;
+  const refB = b.booking_number;
+  if (refA && refB) return refA < refB ? -1 : refA > refB ? 1 : 0;
+  if (refA) return -1;
+  if (refB) return 1;
+  return 0;
+}
+
 export default function ReportsClient({
   bookings,
   showtimes,
@@ -47,7 +72,18 @@ export default function ReportsClient({
   const [absenteeShowtimeId, setAbsenteeShowtimeId] = useState<string>("");
   const [printMode, setPrintMode] = useState<"audience" | "security" | "absentee" | null>(null);
 
-  const paidBookings = useMemo(() => bookings.filter((b) => b.status === "paid"), [bookings]);
+  // Sorted once here, ascending by Booking Ref — every report below (audience,
+  // security, absentee) derives from this same ordered list, via filters that
+  // preserve order, so all three stay consistently sorted without re-sorting
+  // each one separately.
+  const sortedBookings = useMemo(
+    () => [...bookings].sort(compareByBookingRef),
+    [bookings]
+  );
+  const paidBookings = useMemo(
+    () => sortedBookings.filter((b) => b.status === "paid"),
+    [sortedBookings]
+  );
   const securityRows = useMemo(
     () => paidBookings.filter((b) => !showtimeId || b.showtime_id === showtimeId),
     [paidBookings, showtimeId]
@@ -62,30 +98,58 @@ export default function ReportsClient({
     [paidBookings, absenteeShowtimeId]
   );
 
+  // Audience report footer totals — ticket count and revenue across every
+  // booking shown (all statuses, per the report's own "every status" scope).
+  const audienceTotals = useMemo(
+    () =>
+      sortedBookings.reduce(
+        (acc, b) => ({
+          tickets: acc.tickets + ticketCount(b),
+          cents: acc.cents + b.total_cents,
+        }),
+        { tickets: 0, cents: 0 }
+      ),
+    [sortedBookings]
+  );
+
   function exportAudienceCSV() {
     const header = [
       "Customer",
       "Movie",
       "Showtime",
       "Seats",
+      "No. of Tickets",
       "Total",
       "Payment",
       "Status",
       "Attendance",
       "Booked At",
     ];
-    const rows = bookings.map((b) => [
+    const rows = sortedBookings.map((b) => [
       b.customer_name || "",
       b.movie_title,
       formatVenueDateTime(b.starts_at),
       b.seat_labels || "",
+      String(ticketCount(b)),
       (b.total_cents / 100).toFixed(2),
       b.payment_terms || "",
       b.status,
       attendanceLabel(b),
       formatVenueDateTime(b.created_at),
     ]);
-    downloadText("audience-report.csv", toCSV([header, ...rows]));
+    const totalsRow = [
+      "Grand total",
+      "",
+      "",
+      "",
+      String(audienceTotals.tickets),
+      (audienceTotals.cents / 100).toFixed(2),
+      "",
+      "",
+      "",
+      "",
+    ];
+    downloadText("audience-report.csv", toCSV([header, ...rows, totalsRow]));
   }
 
   function exportSecurityCSV() {
@@ -336,24 +400,36 @@ export default function ReportsClient({
               <th className="py-1 text-left">Movie</th>
               <th className="py-1 text-left">Showtime</th>
               <th className="py-1 text-left">Seats</th>
+              <th className="py-1 text-left">No. of Tickets</th>
               <th className="py-1 text-left">Total</th>
               <th className="py-1 text-left">Status</th>
               <th className="py-1 text-left">Attendance</th>
             </tr>
           </thead>
           <tbody>
-            {bookings.map((b) => (
+            {sortedBookings.map((b) => (
               <tr key={b.id} className="border-b border-neutral-400">
                 <td className="py-1">{b.customer_name || "—"}</td>
                 <td className="py-1">{b.movie_title}</td>
                 <td className="py-1">{formatVenueDateTime(b.starts_at)}</td>
                 <td className="py-1">{b.seat_labels || "—"}</td>
+                <td className="py-1">{ticketCount(b)}</td>
                 <td className="py-1">AOA {(b.total_cents / 100).toFixed(2)}</td>
                 <td className="py-1">{b.status}</td>
                 <td className="py-1">{attendanceLabel(b)}</td>
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-black font-semibold">
+              <td className="py-1" colSpan={4}>
+                Grand total
+              </td>
+              <td className="py-1">{audienceTotals.tickets}</td>
+              <td className="py-1">AOA {(audienceTotals.cents / 100).toFixed(2)}</td>
+              <td className="py-1" colSpan={2}></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 
@@ -366,12 +442,14 @@ export default function ReportsClient({
               <th className="px-4 py-3">Movie</th>
               <th className="px-4 py-3">Showtime</th>
               <th className="px-4 py-3">Seats</th>
+              <th className="px-4 py-3">No. of Tickets</th>
+              <th className="px-4 py-3">Total</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Attendance</th>
             </tr>
           </thead>
           <tbody>
-            {bookings.map((b) => (
+            {sortedBookings.map((b) => (
               <tr key={b.id} className="border-t border-neutral-800">
                 <td className="px-4 py-3">{b.customer_name || "—"}</td>
                 <td className="px-4 py-3">{b.movie_title}</td>
@@ -379,6 +457,10 @@ export default function ReportsClient({
                   {formatVenueDateTime(b.starts_at)}
                 </td>
                 <td className="px-4 py-3 text-neutral-400">{b.seat_labels || "—"}</td>
+                <td className="px-4 py-3 text-neutral-400">{ticketCount(b)}</td>
+                <td className="px-4 py-3 text-neutral-400">
+                  AOA {(b.total_cents / 100).toFixed(2)}
+                </td>
                 <td className="px-4 py-3">{b.status}</td>
                 <td className="px-4 py-3">
                   {b.checked_in_at ? (
@@ -390,8 +472,20 @@ export default function ReportsClient({
               </tr>
             ))}
           </tbody>
+          {sortedBookings.length > 0 && (
+            <tfoot>
+              <tr className="border-t border-neutral-700 font-semibold text-neutral-200">
+                <td className="px-4 py-3" colSpan={4}>
+                  Grand total
+                </td>
+                <td className="px-4 py-3">{audienceTotals.tickets}</td>
+                <td className="px-4 py-3">AOA {(audienceTotals.cents / 100).toFixed(2)}</td>
+                <td className="px-4 py-3" colSpan={2}></td>
+              </tr>
+            </tfoot>
+          )}
         </table>
-        {bookings.length === 0 && (
+        {sortedBookings.length === 0 && (
           <div className="p-6 text-center text-neutral-400">No bookings yet.</div>
         )}
       </div>
