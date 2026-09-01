@@ -169,6 +169,12 @@ export default async function AdminBookingsPage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1.5">
+                    <Link
+                      href={`/admin/showtimes/${b.showtime_id}/seats`}
+                      className="rounded-md bg-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
+                    >
+                      Seat map
+                    </Link>
                     {b.status !== "cancelled" && (
                       <Link
                         href={`/admin/bookings/${b.id}/edit`}
