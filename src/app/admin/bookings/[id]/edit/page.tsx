@@ -33,6 +33,17 @@ export default async function EditBookingPage({
     listCustomers(),
   ]);
 
+  // deposit_date is a Postgres DATE column — pg returns those as a Date
+  // object, not the plain string the Booking type claims, so it's coerced
+  // into a "YYYY-MM-DD" string here (safe for either shape) before handing
+  // it to the client form as a date-input default.
+  const rawDepositDate = booking.deposit_date as unknown;
+  const initialDepositDate = !rawDepositDate
+    ? ""
+    : rawDepositDate instanceof Date
+    ? rawDepositDate.toISOString().slice(0, 10)
+    : String(rawDepositDate).slice(0, 10);
+
   return (
     <div>
       <Link href="/admin/bookings" className="text-sm text-neutral-400 hover:text-neutral-200">
@@ -45,7 +56,12 @@ export default async function EditBookingPage({
       </p>
 
       <div className="mt-6 space-y-6">
-        <EditBookingForm booking={booking} seats={seats} currentSeatIds={currentSeatIds} />
+        <EditBookingForm
+          booking={booking}
+          seats={seats}
+          currentSeatIds={currentSeatIds}
+          initialDepositDate={initialDepositDate}
+        />
         {!booking.user_id && <LinkToAccount booking={booking} customers={customers} />}
       </div>
     </div>
