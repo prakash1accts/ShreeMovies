@@ -69,10 +69,26 @@ export default async function AdminShowtimesPage() {
                   {admission && admission.total > 0 && (
                     <div className="mt-1 text-sm text-neutral-400">
                       🎟️ {admission.admitted} / {admission.total} admitted
+                      {new Date(st.starts_at) < new Date() &&
+                        admission.admitted < admission.total && (
+                          <Link
+                            href="/admin/reports"
+                            className="ml-2 text-amber-400 hover:text-amber-300"
+                          >
+                            ⚠ {admission.total - admission.admitted} not yet admitted — see
+                            absentee report
+                          </Link>
+                        )}
                     </div>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  <Link
+                    href={`/admin/showtimes/${st.id}/seats`}
+                    className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-700"
+                  >
+                    Seat map
+                  </Link>
                   <Link
                     href={`/admin/showtimes/${st.id}/edit`}
                     className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-700"
