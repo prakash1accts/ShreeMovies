@@ -106,4 +106,39 @@ export default async function AdminShowtimeSeatsPage({
                           {seatEl}
                         </Link>
                       ) : (
-                        <div key={seat.id}
+                        <div key={seat.id} className="contents">
+                          {seatEl}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-center">
+            <div className="w-full max-w-md rounded-md border-t-4 border-neutral-600 bg-neutral-800/50 py-2 text-center text-xs uppercase tracking-widest text-neutral-400">
+              Screen
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-neutral-400">
+            <span className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded bg-neutral-700" /> Available
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded bg-green-800" /> Held (payment pending)
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded bg-red-900" /> Booked
+            </span>
+          </div>
+          <p className="mt-3 text-center text-xs text-neutral-500">
+            Click a booked or held seat to open that booking.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
