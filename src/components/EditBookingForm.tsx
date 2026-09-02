@@ -181,11 +181,15 @@ export default function EditBookingForm({
                       type="button"
                       disabled={isTaken}
                       onClick={() => toggleSeat(seat)}
-                      title={`${rowLabel}${seat.col_number}`}
+                      title={`${rowLabel}${seat.col_number}${
+                        !isMine && seat.status === "blocked" ? " — blocked" : ""
+                      }`}
                       style={{ gridColumnStart: seat.col_number }}
                       className={[
                         "h-6 w-6 rounded-t-md text-[9px] font-medium leading-6 transition",
-                        isTaken
+                        !isMine && seat.status === "blocked"
+                          ? "cursor-not-allowed bg-orange-900 text-orange-300"
+                          : isTaken
                           ? "cursor-not-allowed bg-neutral-800 text-neutral-700"
                           : isSelected
                           ? "bg-blue-600 text-white"
