@@ -1,10 +1,19 @@
 import Link from "next/link";
 import { listAllBookings } from "@/lib/data";
-import { confirmBookingPaymentAction, cancelBookingAction } from "@/app/actions/admin";
+import {
+  confirmBookingPaymentAction,
+  cancelBookingAction,
+  restoreBookingAction,
+} from "@/app/actions/admin";
 import TicketButton from "@/components/TicketButton";
 import { formatVenueDateTime } from "@/lib/timezone";
 
-export default async function AdminBookingsPage() {
+export default async function AdminBookingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ restoreError?: string }>;
+}) {
+  const { restoreError } = await searchParams;
   const bookings = await listAllBookings();
   const pending = bookings.filter((b) => b.status === "pending");
 
@@ -19,6 +28,12 @@ export default async function AdminBookingsPage() {
           + New Booking
         </Link>
       </div>
+
+      {restoreError && (
+        <div className="mt-4 rounded-lg border border-red-800 bg-red-950/30 p-3 text-sm text-red-300">
+          {restoreError}
+        </div>
+      )}
 
       {pending.length > 0 && (
         <div className="mt-6 rounded-lg border border-yellow-800 bg-yellow-950/30 p-4">
@@ -188,6 +203,14 @@ export default async function AdminBookingsPage() {
                         <input type="hidden" name="id" value={b.id} />
                         <button className="rounded-md bg-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:bg-red-900 hover:text-red-300">
                           Cancel
+                        </button>
+                      </form>
+                    )}
+                    {b.status === "cancelled" && (
+                      <form action={restoreBookingAction}>
+                        <input type="hidden" name="id" value={b.id} />
+                        <button className="rounded-md bg-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:bg-green-900 hover:text-green-300">
+                          Restore
                         </button>
                       </form>
                     )}
