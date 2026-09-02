@@ -2,13 +2,16 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getAdminSeatMapForShowtime, getShowtime } from "@/lib/data";
 import { formatVenueDateTime } from "@/lib/timezone";
+import AdminSeatMapClient from "@/components/AdminSeatMapClient";
 
 // Read-only visual booking layout for one showtime — the actual seat grid
 // (same shape the customer sees) colored by status, with the customer name
 // and booking reference on each occupied seat. This is what was missing
 // from the admin portal: the Bookings table only lists bookings as text
 // rows ("Seats: A3, A4"), with no way to see the whole screen at a glance —
-// who's sitting where, and which seats are still open.
+// who's sitting where, and which seats are still open. The interactive
+// portion (selecting seats to block/unblock) lives in AdminSeatMapClient;
+// this stays a server component for the static header.
 export default async function AdminShowtimeSeatsPage({
   params,
 }: {
@@ -21,20 +24,6 @@ export default async function AdminShowtimeSeatsPage({
   ]);
   if (!showtime) notFound();
 
-  const rowMap = new Map<string, typeof seats>();
-  for (const seat of seats) {
-    if (!rowMap.has(seat.row_label)) rowMap.set(seat.row_label, []);
-    rowMap.get(seat.row_label)!.push(seat);
-  }
-  // Same back-row-on-top ordering as the customer-facing SeatPicker, so the
-  // layout looks identical to what the customer chose from.
-  const rows = Array.from(rowMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  const maxCol = seats.reduce((max, s) => Math.max(max, s.col_number), 0);
-
-  const bookedCount = seats.filter((s) => s.status === "booked").length;
-  const heldCount = seats.filter((s) => s.status === "held").length;
-  const availableCount = seats.filter((s) => s.status === "available").length;
-
   return (
     <div>
       <Link href="/admin/showtimes" className="text-sm text-neutral-400 hover:text-neutral-200">
@@ -45,100 +34,9 @@ export default async function AdminShowtimeSeatsPage({
       </h1>
       <p className="text-sm text-neutral-500">{formatVenueDateTime(showtime.starts_at)}</p>
 
-      <div className="mt-4 flex flex-wrap gap-4 text-sm text-neutral-400">
-        <span>
-          <span className="font-medium text-red-300">{bookedCount}</span> booked
-        </span>
-        <span>
-          <span className="font-medium text-green-300">{heldCount}</span> held (payment pending)
-        </span>
-        <span>
-          <span className="font-medium text-neutral-300">{availableCount}</span> available
-        </span>
+      <div className="mt-4">
+        <AdminSeatMapClient showtimeId={id} seats={seats} />
       </div>
-
-      {seats.length === 0 ? (
-        <p className="mt-8 text-neutral-400">
-          This showtime has no seats yet — it may not have finished being created.
-        </p>
-      ) : (
-        <>
-          <div className="mt-8 overflow-x-auto px-2">
-            <div className="flex w-fit flex-col gap-1.5">
-              {rows.map(([rowLabel, rowSeats]) => (
-                <div key={rowLabel} className="flex items-center gap-2">
-                  <span className="w-4 shrink-0 text-xs text-neutral-500">{rowLabel}</span>
-                  <div
-                    className="grid gap-1.5"
-                    style={{ gridTemplateColumns: `repeat(${maxCol}, 1.75rem)` }}
-                  >
-                    {rowSeats.map((seat) => {
-                      const title =
-                        seat.status === "available"
-                          ? `${rowLabel}${seat.col_number} — available`
-                          : `${rowLabel}${seat.col_number} — ${
-                              seat.status === "held" ? "held, payment pending" : "booked"
-                            }${seat.customer_name ? ` — ${seat.customer_name}` : ""}${
-                              seat.booking_number ? ` (#${seat.booking_number})` : ""
-                            }${seat.checked_in_at ? " — admitted" : ""}`;
-                      const seatEl = (
-                        <div
-                          title={title}
-                          style={{ gridColumnStart: seat.col_number }}
-                          className={[
-                            "flex h-7 w-7 items-center justify-center rounded-t-md text-[9px] font-medium leading-none",
-                            seat.status === "booked"
-                              ? "bg-red-900 text-red-200"
-                              : seat.status === "held"
-                              ? "bg-green-800 text-green-200"
-                              : "bg-neutral-700 text-neutral-300",
-                          ].join(" ")}
-                        >
-                          {seat.col_number}
-                        </div>
-                      );
-                      return seat.booking_id ? (
-                        <Link
-                          key={seat.id}
-                          href={`/admin/bookings/${seat.booking_id}/edit`}
-                          className="contents"
-                        >
-                          {seatEl}
-                        </Link>
-                      ) : (
-                        <div key={seat.id} className="contents">
-                          {seatEl}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 flex justify-center">
-            <div className="w-full max-w-md rounded-md border-t-4 border-neutral-600 bg-neutral-800/50 py-2 text-center text-xs uppercase tracking-widest text-neutral-400">
-              Screen
-            </div>
-          </div>
-
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-neutral-400">
-            <span className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded bg-neutral-700" /> Available
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded bg-green-800" /> Held (payment pending)
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded bg-red-900" /> Booked
-            </span>
-          </div>
-          <p className="mt-3 text-center text-xs text-neutral-500">
-            Click a booked or held seat to open that booking.
-          </p>
-        </>
-      )}
     </div>
   );
 }
