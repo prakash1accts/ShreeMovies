@@ -88,9 +88,9 @@ export async function setUserBlocked(userId: string, blocked: boolean): Promise<
 }
 
 // Lets an admin set a new password directly on a customer's account — for
-// when a customer forgets their password and calls/messages the theatre
-// directly, since there's no self-service "forgot password" email flow. The
-// admin picks (or generates) a new password and shares it with the customer
+// when a customer forgets their password and calls/messages the theatre,
+// since there's no self-service "forgot password" email flow. The admin
+// picks (or generates) a new password and shares it with the customer
 // themselves; this only ever writes an already-hashed password, never a
 // plaintext one, to the database.
 export async function setUserPassword(userId: string, passwordHash: string): Promise<User> {
@@ -805,6 +805,10 @@ export interface BookingWithDetails extends Booking {
   // movie that was never given a poster.
   movie_poster_url: string | null;
   starts_at: string;
+  // The screen the showtime is playing on (e.g. "Screen 6", or however the
+  // admin has named it — "Sala VIP" and friends) — shown on the printed
+  // ticket so the customer knows which hall to look for at the venue.
+  screen_name: string;
   seat_labels: string;
   // Only set when the booking belongs to a registered (online) account —
   // null for admin-entered walk-in bookings, which use customer_name instead.
@@ -1264,6 +1268,7 @@ export async function linkBookingToUser(bookingId: string, userId: string): Prom
 
 const BOOKING_DETAILS_SELECT = `
   SELECT b.*, m.title as movie_title, m.poster_url as movie_poster_url, st.starts_at as starts_at,
+         sc.name as screen_name,
          u.phone as account_phone, u.whatsapp as account_whatsapp,
          -- Walk-in bookings store the name directly on the booking; online
          -- bookings don't, so fall back to the account holder's name. Listed
@@ -1275,6 +1280,7 @@ const BOOKING_DETAILS_SELECT = `
   FROM bookings b
   JOIN showtimes st ON st.id = b.showtime_id
   JOIN movies m ON m.id = st.movie_id
+  JOIN screens sc ON sc.id = st.screen_id
   LEFT JOIN users u ON u.id = b.user_id
 `;
 
