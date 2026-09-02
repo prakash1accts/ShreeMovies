@@ -28,10 +28,34 @@ async function drawTicket(
   booking: BookingWithDetails,
   verifyUrl: string
 ): Promise<string | null> {
+  // The ticket is the customer-facing artifact — it's meant to show what's
+  // true *now*, not the editing history behind it. A "seats changed, please
+  // reprint" note only makes sense as a heads-up on the account page (which
+  // still shows it) telling the customer a fresh ticket exists; once
+  // they're actually looking at that fresh ticket, printing the note on it
+  // too would just be confusing, so it's deliberately left off here.
+  //
+  // A group booking's seats are listed one per line rather than joined into
+  // a single comma string, so a party of several people can read straight
+  // down the list and find their own seat instead of parsing a long run-on
+  // line.
+  const seatLines = (booking.seat_labels || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (seatLines.length === 0) seatLines.push("—");
+
+  const seatsLabelY = 265;
+  const seatLineHeight = 22;
+  const firstSeatLineY = seatsLabelY + 26;
+  const afterSeatsY = firstSeatLineY + (seatLines.length - 1) * seatLineHeight + 40;
+  const refY = afterSeatsY + 40;
+  const qrSize = 170;
+  const qrY = refY + 60;
+
   const canvas = document.createElement("canvas");
   canvas.width = 900;
-  const hasNote = Boolean(booking.seats_changed_note);
-  canvas.height = hasNote ? 700 : 640; // extra room at the bottom for the QR code
+  canvas.height = qrY + qrSize + 70; // extra room at the bottom for the QR code + caption
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
@@ -65,16 +89,16 @@ async function drawTicket(
   ctx.font = "19px Arial";
   ctx.fillStyle = "#d4d4d8";
   ctx.fillText(`Guest: ${booking.customer_name || "—"}`, 45, 235);
-  ctx.fillText(`Seats: ${booking.seat_labels || "—"}`, 45, 265);
-  ctx.fillText(`Total: AOA ${(booking.total_cents / 100).toFixed(2)}`, 45, 295);
 
-  let refY = 350;
-  if (hasNote) {
-    ctx.font = "13px Arial";
-    ctx.fillStyle = "#fbbf24";
-    wrapText(ctx, `⚠ ${booking.seats_changed_note}`, 45, 320, canvas.width - 90, 16);
-    refY = 410;
-  }
+  ctx.fillText("Seats:", 45, seatsLabelY);
+  ctx.font = "18px Arial";
+  seatLines.forEach((seat, i) => {
+    ctx.fillText(seat, 70, firstSeatLineY + i * seatLineHeight);
+  });
+
+  ctx.font = "19px Arial";
+  ctx.fillStyle = "#d4d4d8";
+  ctx.fillText(`Total: AOA ${(booking.total_cents / 100).toFixed(2)}`, 45, afterSeatsY);
 
   ctx.font = "14px Arial";
   ctx.fillStyle = "#71717a";
@@ -83,8 +107,6 @@ async function drawTicket(
 
   // QR code, centered below everything else, with its own white backing so
   // it stays scannable regardless of the ticket's dark background.
-  const qrSize = 170;
-  const qrY = refY + 60;
   const qrX = (canvas.width - qrSize) / 2;
   try {
     const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
