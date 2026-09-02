@@ -5,6 +5,7 @@ import { hashPassword, requireAdmin } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import {
   autoAllocateSeats,
+  blockSeats,
   cancelBooking,
   createAdminBooking,
   createMovie,
@@ -14,6 +15,7 @@ import {
   deleteMovie,
   deleteScreen,
   deleteShowtime,
+  getBookingByReference,
   linkBookingToUser,
   listScreens,
   listTheaters,
@@ -23,6 +25,7 @@ import {
   restoreBooking,
   setUserBlocked,
   setUserPassword,
+  unblockSeats,
   updateBookingSeats,
   updateMovie,
   updateScreenLayout,
@@ -319,6 +322,34 @@ export async function resyncShowtimeSeatsAction(formData: FormData) {
   revalidatePath("/");
 }
 
+// ---------- Seat blocking (maintenance / VIP holds / etc.) ----------
+
+// Takes one or more currently-available seats out of sale for a showtime —
+// a broken seat, a reserved VIP hold, anything the venue doesn't want a
+// customer able to pick — without needing a fake booking to occupy it.
+export async function blockSeatsAction(formData: FormData) {
+  await requireAdmin();
+  const showtimeId = String(formData.get("showtimeId") || "");
+  const seatIds = formData.getAll("seatIds").map(String);
+  if (seatIds.length > 0) {
+    await blockSeats(seatIds);
+  }
+  revalidatePath(`/admin/showtimes/${showtimeId}/seats`);
+  revalidatePath(`/showtimes/${showtimeId}`);
+}
+
+// Returns previously blocked seats to the sellable pool.
+export async function unblockSeatsAction(formData: FormData) {
+  await requireAdmin();
+  const showtimeId = String(formData.get("showtimeId") || "");
+  const seatIds = formData.getAll("seatIds").map(String);
+  if (seatIds.length > 0) {
+    await unblockSeats(seatIds);
+  }
+  revalidatePath(`/admin/showtimes/${showtimeId}/seats`);
+  revalidatePath(`/showtimes/${showtimeId}`);
+}
+
 // ---------- Admin-entered (walk-in / phone) bookings ----------
 
 export async function createAdminBookingAction(
@@ -547,6 +578,102 @@ export async function checkInBookingAction(formData: FormData) {
   }
   revalidatePath("/admin/showtimes");
   redirect(`/verify/${ref}`);
+}
+
+// ---------- Continuous scanner screen (/admin/scan) ----------
+//
+// A hardware 2D/QR scanner behaves like a keyboard: it "types" the ticket's
+// full verify URL (whatever was baked into the QR code — see TicketButton's
+// drawTicket) into whatever's focused, then sends an Enter keystroke. The
+// /admin/scan page keeps a text input permanently focused and calls these
+// two plain (non-FormData) Server Functions directly from a client event
+// handler, so staff can fire scan after scan with no page navigation and no
+// re-tapping an address bar in between — see Next.js's "Event Handlers"
+// invocation pattern for Server Functions.
+
+export type ScanLookupResult =
+  | { found: false; ref: string }
+  | {
+      found: true;
+      ref: string;
+      bookingId: string;
+      movieTitle: string;
+      screenName: string;
+      startsAt: string;
+      seatLabels: string;
+      customerName: string;
+      phone: string | null;
+      totalCents: number;
+      paymentTerms: string | null;
+      status: string;
+      checkedInAt: string | null;
+      seatsChangedNote: string | null;
+      bookingNumber: string | null;
+    };
+
+// A scanned QR yields a full URL like ".../verify/MIRZ061109" — take just the
+// last path segment as the reference. Falls back to treating the raw scan as
+// the reference itself, so a scanner configured to emit only the code (or a
+// staff member typing the reference in by hand as a manual fallback) works
+// the same way.
+function extractRefFromScan(raw: string): string {
+  const trimmed = raw.trim();
+  try {
+    const url = new URL(trimmed);
+    const segments = url.pathname.split("/").filter(Boolean);
+    return segments[segments.length - 1] || trimmed;
+  } catch {
+    const segments = trimmed.split("/").filter(Boolean);
+    return segments[segments.length - 1] || trimmed;
+  }
+}
+
+function toScanResult(
+  ref: string,
+  booking: Awaited<ReturnType<typeof getBookingByReference>>
+): ScanLookupResult {
+  if (!booking) return { found: false, ref };
+  return {
+    found: true,
+    ref,
+    bookingId: booking.id,
+    movieTitle: booking.movie_title,
+    screenName: booking.screen_name,
+    startsAt: booking.starts_at,
+    seatLabels: booking.seat_labels || "—",
+    customerName: booking.customer_name || "—",
+    phone: booking.account_phone || booking.account_whatsapp || null,
+    totalCents: booking.total_cents,
+    paymentTerms: booking.payment_terms,
+    status: booking.status,
+    checkedInAt: booking.checked_in_at,
+    seatsChangedNote: booking.seats_changed_note,
+    bookingNumber: booking.booking_number,
+  };
+}
+
+// Looks a scanned ticket up without changing anything — called on every
+// single scan so staff first see PAID / CANCELLED / already-admitted before
+// choosing to tap Admit.
+export async function scanLookupAction(rawScan: string): Promise<ScanLookupResult> {
+  await requireAdmin();
+  const ref = extractRefFromScan(rawScan);
+  const booking = await getBookingByReference(ref);
+  return toScanResult(ref, booking);
+}
+
+// Admits the ticket the last lookup found, then re-reads it so the returned
+// result reflects the fresh checked_in_at — mirrors checkInBookingAction's
+// idempotency (re-tapping or re-scanning an admitted ticket is a no-op).
+export async function scanCheckInAction(
+  bookingId: string,
+  ref: string
+): Promise<ScanLookupResult> {
+  await requireAdmin();
+  await markBookingCheckedIn(bookingId);
+  revalidatePath("/admin/showtimes");
+  const booking = await getBookingByReference(ref);
+  return toScanResult(ref, booking);
 }
 
 // ---------- Customer accounts ----------
