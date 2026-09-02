@@ -61,7 +61,10 @@ export interface Showtime {
   hold_minutes: number;
 }
 
-export type SeatStatus = "available" | "held" | "booked";
+// "blocked" is an admin-only state — a seat taken out of sale (broken seat,
+// VIP hold, etc.) without a real booking behind it. Never set by the
+// booking flow itself, only by an admin via blockSeats()/unblockSeats().
+export type SeatStatus = "available" | "held" | "booked" | "blocked";
 
 export interface Seat {
   id: string;
