@@ -14,6 +14,47 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+// Collapses a booking's seats into one summary line per physical row instead
+// of listing every seat — e.g. "M13, M14, M9, M10, M11, M12" becomes a single
+// "M9 to M14 = 6 Nos" line, the way a printed group ticket would read. A row
+// whose booked seats aren't a single unbroken run (rare, but possible after
+// an edit that leaves a gap) falls back to listing that row's seat numbers
+// explicitly rather than claiming a range that isn't real.
+function formatSeatGroups(seatLabelsRaw: string): string[] {
+  const seats = seatLabelsRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (seats.length === 0) return ["—"];
+
+  const byRow = new Map<string, number[]>();
+  const unparsed: string[] = [];
+  for (const seat of seats) {
+    const m = seat.match(/^([A-Za-z]+)(\d+)$/);
+    if (!m) {
+      unparsed.push(seat);
+      continue;
+    }
+    const [, row, numStr] = m;
+    if (!byRow.has(row)) byRow.set(row, []);
+    byRow.get(row)!.push(Number(numStr));
+  }
+
+  const lines: string[] = [];
+  for (const row of Array.from(byRow.keys()).sort()) {
+    const nums = byRow.get(row)!.sort((a, b) => a - b);
+    if (nums.length === 1) {
+      lines.push(`${row}${nums[0]} (1 No)`);
+    } else if (nums[nums.length - 1] - nums[0] + 1 === nums.length) {
+      lines.push(`${row}${nums[0]} to ${row}${nums[nums.length - 1]} = ${nums.length} Nos`);
+    } else {
+      lines.push(`${nums.map((n) => `${row}${n}`).join(", ")} = ${nums.length} Nos`);
+    }
+  }
+  lines.push(...unparsed);
+  return lines.length > 0 ? lines : ["—"];
+}
+
 // Draws a simple ticket image on a canvas (no server round-trip, no extra
 // dependencies) so it can be downloaded as a PNG or shared as text via
 // WhatsApp/Email/SMS links. Browsers don't allow auto-attaching an image to
@@ -35,15 +76,12 @@ async function drawTicket(
   // they're actually looking at that fresh ticket, printing the note on it
   // too would just be confusing, so it's deliberately left off here.
   //
-  // A group booking's seats are listed one per line rather than joined into
-  // a single comma string, so a party of several people can read straight
-  // down the list and find their own seat instead of parsing a long run-on
-  // line.
-  const seatLines = (booking.seat_labels || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (seatLines.length === 0) seatLines.push("—");
+  // A group booking's seats are summarized one row per line (e.g. "M9 to
+  // M14 = 6 Nos") rather than run together in one long comma string, so a
+  // party of several people can read straight down the list instead of
+  // parsing a run-on line — and instead of a wall of individual seat
+  // numbers, each physical row collapses into a single readable count.
+  const seatLines = formatSeatGroups(booking.seat_labels || "");
 
   const seatsLabelY = 265;
   const seatLineHeight = 22;
