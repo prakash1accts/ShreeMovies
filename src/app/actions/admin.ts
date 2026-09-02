@@ -20,6 +20,7 @@ import {
   markBookingCheckedIn,
   markBookingPaid,
   resyncShowtimeSeats,
+  restoreBooking,
   setUserBlocked,
   setUserPassword,
   updateBookingSeats,
@@ -437,6 +438,26 @@ export async function cancelBookingAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") || "");
   if (id) await cancelBooking(id);
+  revalidatePath("/admin/bookings");
+  revalidatePath("/account");
+}
+
+// Undoes a mistaken cancellation — puts the booking back to 'paid' and
+// re-books its seats. If the seats were taken by someone else in the
+// meantime, restoreBooking() throws; we surface that reason back to the
+// bookings page via a query param instead of crashing the request.
+export async function restoreBookingAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  if (id) {
+    try {
+      await restoreBooking(id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not restore this booking.";
+      revalidatePath("/admin/bookings");
+      redirect(`/admin/bookings?restoreError=${encodeURIComponent(message)}`);
+    }
+  }
   revalidatePath("/admin/bookings");
   revalidatePath("/account");
 }
