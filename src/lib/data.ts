@@ -795,6 +795,31 @@ async function setSeatsStatus(
   }
 }
 
+// Takes seats out of sale entirely — a broken seat, a reserved/VIP hold,
+// anything the venue doesn't want a customer able to book — without needing
+// a fake booking to occupy them. Only seats currently 'available' are
+// affected; a seat someone is mid-purchase on (held) or has already paid
+// for (booked) is left alone — cancel or edit that booking first if it
+// genuinely needs to come out of sale.
+export async function blockSeats(seatIds: string[]): Promise<void> {
+  if (seatIds.length === 0) return;
+  await query(
+    "UPDATE seats SET status = 'blocked', held_at = NULL WHERE id = ANY($1) AND status = 'available'",
+    [seatIds]
+  );
+}
+
+// Returns previously blocked seats to the sellable pool. Only affects seats
+// currently 'blocked' — passing a booked/held seat's id here is a no-op
+// rather than something that could ever unbook a real customer.
+export async function unblockSeats(seatIds: string[]): Promise<void> {
+  if (seatIds.length === 0) return;
+  await query(
+    "UPDATE seats SET status = 'available' WHERE id = ANY($1) AND status = 'blocked'",
+    [seatIds]
+  );
+}
+
 // ---------- Bookings ----------
 
 export interface BookingWithDetails extends Booking {
