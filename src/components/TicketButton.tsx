@@ -157,11 +157,11 @@ async function drawTicket(
   mainCursor += 22; // "Admit One"
   mainCursor += 24; // divider + gap
   mainCursor += (titleLines.length - 1) * 30; // extra movie-title lines
-  mainCursor += 40; // showtime line
+  mainCursor += 40; // showtime + screen line
   mainCursor += 30; // guest line
-  mainCursor += 24; // "Seats:" label
-  mainCursor += (seatLines.length - 1) * 22; // extra seat lines
-  mainCursor += 40; // total line
+  mainCursor += 26; // "Seats:" label
+  mainCursor += (seatLines.length - 1) * 28; // extra seat lines (bold, larger font)
+  mainCursor += 44; // total line
   const mainBottom = mainCursor + 30;
 
   // The stub's own minimum height — enough room for the "E-TICKET" label,
@@ -260,20 +260,30 @@ async function drawTicket(
   y += 34;
   ctx.font = "16px Arial";
   ctx.fillStyle = "#d4d4d8";
-  ctx.fillText(formatVenueDateTime(booking.starts_at), mainX, y);
+  ctx.fillText(
+    `${formatVenueDateTime(booking.starts_at)} · ${booking.screen_name}`,
+    mainX,
+    y
+  );
 
   y += 30;
   ctx.fillText(`Guest: ${booking.customer_name || "—"}`, mainX, y);
 
   y += 30;
+  ctx.font = "14px Arial";
+  ctx.fillStyle = "#d4d4d8";
   ctx.fillText("Seats:", mainX, y);
-  ctx.font = "15px Arial";
+  // Seat numbers are the thing a customer squints at hardest at the door —
+  // bold and noticeably larger than the surrounding labels so they're the
+  // easiest thing to read on the whole ticket.
+  ctx.font = "bold 19px Arial";
+  ctx.fillStyle = "#f5f5f5";
   seatLines.forEach((seat, i) => {
-    ctx.fillText(seat, mainX + 20, y + 24 + i * 22);
+    ctx.fillText(seat, mainX + 20, y + 28 + i * 28);
   });
-  y += 24 + (seatLines.length - 1) * 22;
+  y += 28 + (seatLines.length - 1) * 28;
 
-  y += 34;
+  y += 38;
   ctx.font = "17px Arial";
   ctx.fillStyle = "#f5f5f5";
   ctx.fillText(`Total: AOA ${(booking.total_cents / 100).toFixed(2)}`, mainX, y);
