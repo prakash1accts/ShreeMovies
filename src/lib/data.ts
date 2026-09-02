@@ -799,6 +799,11 @@ async function setSeatsStatus(
 
 export interface BookingWithDetails extends Booking {
   movie_title: string;
+  // The movie's poster (usually a data: URL — see AdminMovieForm's resize
+  // step — occasionally an admin-pasted external link) — carried along so
+  // the printable ticket can show it without a second lookup. Null for a
+  // movie that was never given a poster.
+  movie_poster_url: string | null;
   starts_at: string;
   seat_labels: string;
   // Only set when the booking belongs to a registered (online) account —
@@ -1214,7 +1219,7 @@ export async function linkBookingToUser(bookingId: string, userId: string): Prom
 }
 
 const BOOKING_DETAILS_SELECT = `
-  SELECT b.*, m.title as movie_title, st.starts_at as starts_at,
+  SELECT b.*, m.title as movie_title, m.poster_url as movie_poster_url, st.starts_at as starts_at,
          u.phone as account_phone, u.whatsapp as account_whatsapp,
          -- Walk-in bookings store the name directly on the booking; online
          -- bookings don't, so fall back to the account holder's name. Listed
