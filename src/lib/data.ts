@@ -88,9 +88,9 @@ export async function setUserBlocked(userId: string, blocked: boolean): Promise<
 }
 
 // Lets an admin set a new password directly on a customer's account — for
-// when a customer forgets their password and calls/messages the theatre,
-// since there's no self-service "forgot password" email flow. The admin
-// picks (or generates) a new password and shares it with the customer
+// when a customer forgets their password and calls/messages the theatre
+// directly, since there's no self-service "forgot password" email flow. The
+// admin picks (or generates) a new password and shares it with the customer
 // themselves; this only ever writes an already-hashed password, never a
 // plaintext one, to the database.
 export async function setUserPassword(userId: string, passwordHash: string): Promise<User> {
@@ -1192,6 +1192,50 @@ export async function cancelBooking(bookingId: string) {
       "available",
       client
     );
+  });
+}
+
+// Reverses a mistaken cancellation: puts the booking back to 'paid' and
+// re-books its original seats. Refuses (throwing, so the caller can show
+// the reason) if any of those seats have since been booked by someone else
+// under a different, still-active booking — blindly overwriting that would
+// silently double-book the seat.
+export async function restoreBooking(bookingId: string) {
+  await withTransaction(async (client) => {
+    const { rows: seatRows } = await clientQuery<{ seat_id: string; label: string }>(
+      client,
+      `SELECT bs.seat_id, s.row_label || s.col_number::text as label
+       FROM booking_seats bs
+       JOIN seats s ON s.id = bs.seat_id
+       WHERE bs.booking_id = $1`,
+      [bookingId]
+    );
+    if (seatRows.length === 0) {
+      throw new Error("This booking has no seats on file, so there is nothing to restore.");
+    }
+    const seatIds = seatRows.map((s) => s.seat_id);
+
+    const { rows: conflictRows } = await clientQuery<{ label: string }>(
+      client,
+      `SELECT s.row_label || s.col_number::text as label
+       FROM booking_seats bs
+       JOIN bookings b ON b.id = bs.booking_id
+       JOIN seats s ON s.id = bs.seat_id
+       WHERE bs.seat_id = ANY($1) AND bs.booking_id != $2 AND b.status != 'cancelled'`,
+      [seatIds, bookingId]
+    );
+    if (conflictRows.length > 0) {
+      const labels = conflictRows.map((r) => r.label).join(", ");
+      throw new Error(
+        `Can't restore — seat(s) ${labels} have already been booked by someone else since this booking was cancelled.`
+      );
+    }
+
+    await client.query(
+      "UPDATE bookings SET status = 'paid', cancel_reason = NULL WHERE id = $1",
+      [bookingId]
+    );
+    await setSeatsStatus(seatIds, "booked", client);
   });
 }
 
