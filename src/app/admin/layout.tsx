@@ -45,6 +45,12 @@ export default async function AdminLayout({
           Bookings
         </Link>
         <Link
+          href="/admin/scan"
+          className="rounded-md px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
+        >
+          Scan
+        </Link>
+        <Link
           href="/admin/reports"
           className="rounded-md px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
         >
