@@ -5,6 +5,20 @@ import QRCode from "qrcode";
 import type { BookingWithDetails } from "@/lib/data";
 import { formatVenueDateTime } from "@/lib/timezone";
 
+// Turns a customer name into a safe, readable filename fragment — spaces
+// become dashes, anything that isn't a letter/number/dash/underscore is
+// stripped, and runs of dashes collapse into one. Falls back to the booking
+// reference when there's no name at all (shouldn't normally happen, but a
+// download should never end up with an empty filename).
+function slugifyName(name: string): string {
+  const slug = name
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9-_]/g, "")
+    .replace(/-+/g, "-");
+  return slug || "guest";
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -154,6 +168,7 @@ async function drawTicket(
 
   let mainCursor = 40;
   mainCursor += 30; // brand line
+  mainCursor += 18; // venue/location line
   mainCursor += 22; // "Admit One"
   mainCursor += 24; // divider + gap
   mainCursor += (titleLines.length - 1) * 30; // extra movie-title lines
@@ -238,6 +253,14 @@ async function drawTicket(
   ctx.font = "bold 24px Arial";
   y += 24;
   ctx.fillText("🎬 Shree Movies", mainX, y);
+
+  // Venue location — the physical address customers actually need in order
+  // to show up at the right place, printed right under the brand name so
+  // it's impossible to miss.
+  ctx.font = "12px Arial";
+  ctx.fillStyle = "#a3a3a3";
+  y += 18;
+  ctx.fillText("ZAP Cinemas, Morro Bento, Talatona", mainX, y);
 
   ctx.font = "13px Arial";
   ctx.fillStyle = "#a3a3a3";
@@ -399,7 +422,14 @@ export default function TicketButton({ booking }: { booking: BookingWithDetails 
             <div className="mt-4 flex flex-wrap gap-2">
               {imageUrl && (
                 <a href={imageUrl}
-                  download={`ticket-${booking.id}.png`}
+                  // Named after the guest so a folder full of downloaded
+                  // tickets is easy to sort through — the booking reference
+                  // is appended too so two guests who happen to share a name
+                  // (or one guest with two bookings) never overwrite each
+                  // other's file.
+                  download={`${slugifyName(booking.customer_name || "guest")}-${
+                    booking.booking_number || booking.id
+                  }.png`}
                   className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
                 >
                   Download image
