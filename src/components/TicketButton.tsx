@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import type { BookingWithDetails } from "@/lib/data";
 import { formatVenueDateTime } from "@/lib/timezone";
@@ -17,6 +17,24 @@ function slugifyName(name: string): string {
     .replace(/[^a-zA-Z0-9-_]/g, "")
     .replace(/-+/g, "-");
   return slug || "guest";
+}
+
+// iOS/iPadOS Safari (and any other WebKit-based mobile browser) ignores the
+// `download` attribute on a link whose href is a data: URL — tapping it just
+// tries to navigate to the data: URL itself, which visibly does nothing.
+// Handing the browser a blob: URL instead is the well-supported cross-browser
+// fix: Safari (including on iPhone) treats a `download`-attributed blob: link
+// like a real file and either saves it straight away or opens it full-screen
+// for a "press and hold → Save Image" (we tell people about that fallback in
+// the UI too, since even the blob: fix doesn't force an automatic save on
+// every iOS version).
+function dataUrlToBlobUrl(dataUrl: string): string {
+  const [header, base64] = dataUrl.split(",");
+  const mime = /data:(.*);base64/.exec(header)?.[1] || "image/png";
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: mime }));
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -374,16 +392,37 @@ async function drawTicket(
 export default function TicketButton({ booking }: { booking: BookingWithDetails }) {
   const [open, setOpen] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Tracks the blob: URL so it can be revoked (freeing the memory) once it's
+  // no longer needed, instead of quietly piling up every time a ticket is
+  // opened — this matters most for admins clicking through many tickets in a
+  // row, e.g. while exporting them one after another.
+  const downloadUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (downloadUrlRef.current) URL.revokeObjectURL(downloadUrlRef.current);
+    };
+  }, []);
 
   async function handleOpen() {
     setOpen(true);
     setLoading(true);
     setImageUrl(null);
+    setDownloadUrl(null);
     const verifyUrl = `${window.location.origin}/verify/${booking.booking_number || booking.id}`;
     const url = await drawTicket(booking, verifyUrl);
     setImageUrl(url);
+    if (downloadUrlRef.current) URL.revokeObjectURL(downloadUrlRef.current);
+    const blobUrl = url ? dataUrlToBlobUrl(url) : null;
+    downloadUrlRef.current = blobUrl;
+    setDownloadUrl(blobUrl);
     setLoading(false);
+  }
+
+  function handleClose() {
+    setOpen(false);
   }
 
   const shareText = `Shree Movies ticket — ${booking.movie_title}, ${formatVenueDateTime(
@@ -403,7 +442,7 @@ export default function TicketButton({ booking }: { booking: BookingWithDetails 
       {open && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setOpen(false)}
+          onClick={handleClose}
         >
           <div
             className="max-w-2xl rounded-lg bg-neutral-900 p-5"
@@ -420,13 +459,16 @@ export default function TicketButton({ booking }: { booking: BookingWithDetails 
               />
             )}
             <div className="mt-4 flex flex-wrap gap-2">
-              {imageUrl && (
-                <a href={imageUrl}
+              {downloadUrl && (
+                <a href={downloadUrl}
                   // Named after the guest so a folder full of downloaded
                   // tickets is easy to sort through — the booking reference
                   // is appended too so two guests who happen to share a name
                   // (or one guest with two bookings) never overwrite each
-                  // other's file.
+                  // other's file. This points at a blob: URL rather than the
+                  // raw data: URL from the canvas — iOS Safari silently
+                  // ignores `download` on data: links, so the image would
+                  // otherwise just fail to save on an iPhone.
                   download={`${slugifyName(booking.customer_name || "guest")}-${
                     booking.booking_number || booking.id
                   }.png`}
@@ -460,9 +502,15 @@ export default function TicketButton({ booking }: { booking: BookingWithDetails 
               image above first and attach it manually, since browsers don&apos;t allow
               auto-attaching images through these links.
             </p>
+            <p className="mt-2 text-xs text-neutral-500">
+              On iPhone/iPad, if &quot;Download image&quot; doesn&apos;t save anything, press and
+              hold the ticket image above instead and choose &quot;Add to Photos&quot; or
+              &quot;Save Image&quot; — Safari doesn&apos;t always let a webpage trigger a download
+              directly.
+            </p>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={handleClose}
               className="mt-4 text-sm text-neutral-400 hover:text-neutral-200"
             >
               Close
