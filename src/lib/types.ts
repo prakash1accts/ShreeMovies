@@ -59,6 +59,10 @@ export interface Showtime {
   starts_at: string;
   price_cents: number;
   hold_minutes: number;
+  // Set once an admin "closes" this showtime after the screening is done —
+  // null means still active/open. See closeShowtime()/reopenShowtime() in
+  // data.ts for what closing does and doesn't touch.
+  closed_at: string | null;
 }
 
 // "blocked" is an admin-only state — a seat taken out of sale (broken seat,
@@ -75,7 +79,12 @@ export interface Seat {
 }
 
 export type BookingStatus = "pending" | "paid" | "cancelled";
-export type PaymentTerms = "cash" | "deposit";
+// "cash_due" = seats are locked in and the ticket is printed, but the
+// customer will pay cash at the door rather than having paid already —
+// flagged prominently to gate staff when the ticket is scanned so they know
+// to collect payment before admitting. markCashCollected() in data.ts flips
+// it to "cash" once staff actually collect it.
+export type PaymentTerms = "cash" | "deposit" | "cash_due";
 
 export interface Booking {
   id: string;
