@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { BookingWithDetails, ShowtimeWithMovie } from "@/lib/data";
+import { resetShowtimeCheckInsAction } from "@/app/actions/admin";
 import { formatVenueDateTime } from "@/lib/timezone";
 
 function toCSV(rows: string[][]): string {
@@ -68,9 +70,14 @@ export default function ReportsClient({
   bookings: BookingWithDetails[];
   showtimes: ShowtimeWithMovie[];
 }) {
+  const router = useRouter();
   const [showtimeId, setShowtimeId] = useState<string>("");
   const [absenteeShowtimeId, setAbsenteeShowtimeId] = useState<string>("");
   const [printMode, setPrintMode] = useState<"audience" | "security" | "absentee" | null>(null);
+  const [resetShowtimeId, setResetShowtimeId] = useState<string>("");
+  const [resetConfirming, setResetConfirming] = useState(false);
+  const [resetPending, setResetPending] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
 
   // Sorted once here, ascending by Booking Ref — every report below (audience,
   // security, absentee) derives from this same ordered list, via filters that
@@ -96,6 +103,18 @@ export default function ReportsClient({
         (b) => !b.checked_in_at && (!absenteeShowtimeId || b.showtime_id === absenteeShowtimeId)
       ),
     [paidBookings, absenteeShowtimeId]
+  );
+
+  // How many bookings under the chosen showtime are currently marked
+  // admitted — shown next to the Reset check-ins button so whoever's about
+  // to click it can see exactly how many admissions (real or test scans)
+  // are about to be cleared before they confirm.
+  const resetAdmittedCount = useMemo(
+    () =>
+      resetShowtimeId
+        ? sortedBookings.filter((b) => b.showtime_id === resetShowtimeId && b.checked_in_at).length
+        : 0,
+    [sortedBookings, resetShowtimeId]
   );
 
   // The audience report still lists every status (so a cancellation is
@@ -222,6 +241,32 @@ export default function ReportsClient({
   function printAbsentee() {
     setPrintMode("absentee");
     setTimeout(() => window.print(), 50);
+  }
+
+  // Two taps on purpose, no browser confirm() popup: the first tap just
+  // turns the button red and shows exactly how many admissions are about to
+  // be cleared: a second, deliberate tap actually does it. Undoing a batch
+  // of test scans should never be one accidental click away.
+  async function handleResetCheckIns() {
+    if (!resetShowtimeId) return;
+    if (!resetConfirming) {
+      setResetConfirming(true);
+      setResetMessage(null);
+      return;
+    }
+    setResetPending(true);
+    try {
+      const count = await resetShowtimeCheckInsAction(resetShowtimeId);
+      setResetMessage(
+        count > 0
+          ? `Done — cleared ${count} check-in${count === 1 ? "" : "s"} for this showtime.`
+          : "Nothing to reset — no bookings under this showtime are currently marked admitted."
+      );
+      router.refresh();
+    } finally {
+      setResetPending(false);
+      setResetConfirming(false);
+    }
   }
 
   return (
@@ -354,6 +399,64 @@ export default function ReportsClient({
           Phone/WhatsApp is only on file for bookings placed by a registered account — walk-in /
           box-office sales won&apos;t have a number here unless one was noted elsewhere.
         </p>
+      </section>
+
+      <section className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900 p-5 print:hidden">
+        <h2 className="font-semibold">Reset check-ins</h2>
+        <p className="mt-1 text-sm text-neutral-400">
+          Undo test/practice scans for a showtime — clears &quot;Admitted&quot; on every booking
+          under it so the real door count starts at zero. Only touches admission status; bookings,
+          seats, and payment are untouched.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <select
+            value={resetShowtimeId}
+            onChange={(e) => {
+              setResetShowtimeId(e.target.value);
+              setResetConfirming(false);
+              setResetMessage(null);
+            }}
+            className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
+          >
+            <option value="">Choose a showtime…</option>
+            {showtimes.map((st) => (
+              <option key={st.id} value={st.id}>
+                {st.movie_title} — {formatVenueDateTime(st.starts_at)}
+              </option>
+            ))}
+          </select>
+          {resetShowtimeId && (
+            <span className="text-sm text-neutral-500">
+              {resetAdmittedCount} currently admitted
+            </span>
+          )}
+          <button
+            type="button"
+            disabled={!resetShowtimeId || resetPending}
+            onClick={handleResetCheckIns}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
+              resetConfirming
+                ? "bg-red-700 text-white hover:bg-red-600"
+                : "bg-neutral-800 text-neutral-200 hover:bg-neutral-700"
+            }`}
+          >
+            {resetPending
+              ? "Resetting…"
+              : resetConfirming
+              ? `Confirm reset (${resetAdmittedCount})`
+              : "Reset check-ins"}
+          </button>
+          {resetConfirming && !resetPending && (
+            <button
+              type="button"
+              onClick={() => setResetConfirming(false)}
+              className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-700"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+        {resetMessage && <p className="mt-2 text-sm text-green-400">{resetMessage}</p>}
       </section>
 
       {/* Printable security report — only rendered into the print output when
