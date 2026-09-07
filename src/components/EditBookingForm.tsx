@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { editBookingDetailsAction } from "@/app/actions/admin";
+import { lookupCustomerByPhoneAction } from "@/app/actions/customers";
 import type { Booking, Seat } from "@/lib/types";
 
 export default function EditBookingForm({
@@ -9,6 +10,7 @@ export default function EditBookingForm({
   seats,
   currentSeatIds,
   initialDepositDate,
+  initialCustomerPhone,
 }: {
   booking: Booking;
   seats: Seat[];
@@ -18,6 +20,10 @@ export default function EditBookingForm({
   // reaching this client component, since a raw Date value can't safely
   // cross that boundary as a date-input default.
   initialDepositDate: string;
+  // Looked up server-side from booking.customer_id when set — blank for
+  // bookings that predate the master customer directory (or online
+  // bookings, which carry their phone on the account instead).
+  initialCustomerPhone: string;
 }) {
   const [state, formAction, isPending] = useActionState(editBookingDetailsAction, undefined);
 
@@ -41,6 +47,26 @@ export default function EditBookingForm({
   const [depositReference, setDepositReference] = useState(booking.deposit_reference ?? "");
   const [depositDate, setDepositDate] = useState(initialDepositDate);
   const [selected, setSelected] = useState<Set<string>>(new Set(currentSeatIds));
+
+  const [customerPhone, setCustomerPhone] = useState(initialCustomerPhone);
+  const [customerName, setCustomerName] = useState(booking.customer_name ?? "");
+  const [lookupStatus, setLookupStatus] = useState<"idle" | "checking" | "found" | "new">("idle");
+
+  async function handlePhoneBlur() {
+    const phone = customerPhone.trim();
+    if (!phone) {
+      setLookupStatus("idle");
+      return;
+    }
+    setLookupStatus("checking");
+    const match = await lookupCustomerByPhoneAction(phone);
+    if (match) {
+      setCustomerName(match.name);
+      setLookupStatus("found");
+    } else {
+      setLookupStatus("new");
+    }
+  }
 
   const rows = useMemo(() => {
     const map = new Map<string, Seat[]>();
@@ -88,6 +114,43 @@ export default function EditBookingForm({
       ))}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {booking.created_by_admin && (
+          <>
+            <div>
+              <label className="mb-1 block text-sm text-neutral-300">Phone number</label>
+              <input
+                name="customerPhone"
+                value={customerPhone}
+                onChange={(e) => {
+                  setCustomerPhone(e.target.value);
+                  setLookupStatus("idle");
+                }}
+                onBlur={handlePhoneBlur}
+                placeholder="+244923456789"
+                className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
+              />
+              <p className="mt-1 text-xs text-neutral-500">
+                {lookupStatus === "checking"
+                  ? "Checking…"
+                  : lookupStatus === "found"
+                  ? "✓ Existing customer — name filled in below."
+                  : lookupStatus === "new"
+                  ? "New number — check the name below."
+                  : "Add or correct this customer's number in the master directory."}
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-neutral-300">Customer name</label>
+              <input
+                name="customerName"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
+              />
+            </div>
+          </>
+        )}
+
         <div>
           <label className="mb-1 block text-sm text-neutral-300">No. of tickets</label>
           <input
