@@ -31,8 +31,12 @@ export default function EditBookingForm({
       Math.round(booking.total_cents / Math.max(1, currentSeatIds.length));
     return (cents / 100).toFixed(2);
   });
-  const [paymentTerms, setPaymentTerms] = useState<"cash" | "deposit">(
-    booking.payment_terms === "deposit" ? "deposit" : "cash"
+  const [paymentTerms, setPaymentTerms] = useState<"cash" | "deposit" | "cash_due">(
+    booking.payment_terms === "deposit"
+      ? "deposit"
+      : booking.payment_terms === "cash_due"
+      ? "cash_due"
+      : "cash"
   );
   const [depositReference, setDepositReference] = useState(booking.deposit_reference ?? "");
   const [depositDate, setDepositDate] = useState(initialDepositDate);
@@ -122,12 +126,19 @@ export default function EditBookingForm({
           <select
             name="paymentTerms"
             value={paymentTerms}
-            onChange={(e) => setPaymentTerms(e.target.value as "cash" | "deposit")}
+            onChange={(e) => setPaymentTerms(e.target.value as "cash" | "deposit" | "cash_due")}
             className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
           >
             <option value="cash">Cash</option>
             <option value="deposit">Deposit</option>
+            <option value="cash_due">Cash Due (pay at the door)</option>
           </select>
+          {paymentTerms === "cash_due" && (
+            <p className="mt-1 text-xs text-amber-400">
+              Gate staff will get a CASH DUE reminder — with the amount owed — the moment this
+              ticket is scanned at the door.
+            </p>
+          )}
         </div>
 
         {paymentTerms === "deposit" && (
