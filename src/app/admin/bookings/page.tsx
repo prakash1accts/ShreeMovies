@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listAllBookings } from "@/lib/data";
+import { listActiveBookings } from "@/lib/data";
 import {
   confirmBookingPaymentAction,
   cancelBookingAction,
@@ -14,7 +14,7 @@ export default async function AdminBookingsPage({
   searchParams: Promise<{ restoreError?: string }>;
 }) {
   const { restoreError } = await searchParams;
-  const bookings = await listAllBookings();
+  const bookings = await listActiveBookings();
   const pending = bookings.filter((b) => b.status === "pending");
 
   return (
