@@ -5,11 +5,15 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import {
   cancelBooking,
+  claimPromoCode,
   createPendingBooking,
+  getRedeemablePromoCode,
   getSeatsByIds,
   getShowtime,
   getUserById,
+  releasePromoCode,
 } from "@/lib/data";
+import type { PromoCode } from "@/lib/types";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { formatVenueDateTime } from "@/lib/timezone";
 
@@ -50,7 +54,33 @@ export async function bookSeatsAction(
     return { error: "One or more selected seats were just taken. Please pick again." };
   }
 
-  const totalCents = seats.length * showtime.price_cents;
+  const rawTotalCents = seats.length * showtime.price_cents;
+
+  // A promo code is optional — only validated (and only ever locks/burns
+  // the code) when one was actually entered, so booking without a code
+  // behaves exactly as before.
+  const promoCodeInput = String(formData.get("promoCode") || "").trim();
+  let promo: PromoCode | undefined;
+  let discountCents = 0;
+  if (promoCodeInput) {
+    promo = await getRedeemablePromoCode(promoCodeInput, showtimeId);
+    if (!promo) {
+      return {
+        error: "That promo code isn't valid for this showtime, or has already been used.",
+      };
+    }
+    discountCents = Math.round((rawTotalCents * promo.discount_percent) / 100);
+  }
+  const totalCents = rawTotalCents - discountCents;
+
+  let claimedPromoId: string | null = null;
+  if (promo) {
+    const claimed = await claimPromoCode(promo.id);
+    if (!claimed) {
+      return { error: "That promo code was just used by someone else. Please try again." };
+    }
+    claimedPromoId = claimed.id;
+  }
 
   let booking;
   try {
@@ -59,8 +89,11 @@ export async function bookSeatsAction(
       showtimeId,
       seatIds,
       totalCents,
+      promoCode: promo?.code ?? null,
+      discountCents,
     });
   } catch {
+    if (claimedPromoId) await releasePromoCode(claimedPromoId);
     return { error: "One or more selected seats were just taken. Please pick again." };
   }
 
@@ -85,15 +118,18 @@ export async function bookSeatsAction(
       {
         price_data: {
           currency: "usd",
-          unit_amount: showtime.price_cents,
+          // One line item for the (possibly discounted) total rather than
+          // per-seat unit_amount x quantity — keeps a promo-code discount
+          // exact instead of splitting it unevenly across seats.
+          unit_amount: totalCents,
           product_data: {
             name: `${showtime.movie_title} — ${formatVenueDateTime(showtime.starts_at)}`,
-            description: `Seats: ${seats
-              .map((s) => `${s.row_label}${s.col_number}`)
-              .join(", ")}`,
+            description: `Seats: ${seats.map((s) => `${s.row_label}${s.col_number}`).join(", ")}${
+              promo ? ` · Promo ${promo.code} (${promo.discount_percent}% off)` : ""
+            }`,
           },
         },
-        quantity: seats.length,
+        quantity: 1,
       },
     ],
     success_url: `${origin}/booking/success?booking=${booking.id}&session_id={CHECKOUT_SESSION_ID}`,
@@ -103,6 +139,7 @@ export async function bookSeatsAction(
 
   if (!checkoutSession.url) {
     await cancelBooking(booking.id);
+    if (claimedPromoId) await releasePromoCode(claimedPromoId);
     return { error: "Could not start checkout. Please try again." };
   }
 
