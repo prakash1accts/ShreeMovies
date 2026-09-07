@@ -80,9 +80,25 @@ CREATE TABLE IF NOT EXISTS seats (
   UNIQUE(showtime_id, row_label, col_number)
 );
 
+-- Master phone -> name directory, keyed by phone number (e.g. "+244923456789",
+-- with country code). Deliberately separate from `users` (which is for
+-- online login accounts with a password) so a customer's name only has to
+-- be entered once — by an admin at the box office or by the customer
+-- themselves at signup — and is then reused for every future booking under
+-- that same number, from either side.
+CREATE TABLE IF NOT EXISTS customers (
+  id TEXT PRIMARY KEY,
+  phone TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  whatsapp TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS bookings (
   id TEXT PRIMARY KEY,
   user_id TEXT REFERENCES users(id) ON DELETE CASCADE, -- null for admin-entered walk-in/phone bookings with no online account
+  customer_id TEXT REFERENCES customers(id), -- links to the master phone/name directory above, set whenever a phone number was captured for this booking
   showtime_id TEXT NOT NULL REFERENCES showtimes(id) ON DELETE CASCADE,
   status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'paid' | 'cancelled'
   total_cents INTEGER NOT NULL,
@@ -102,6 +118,7 @@ CREATE TABLE IF NOT EXISTS bookings (
 );
 ALTER TABLE bookings ALTER COLUMN user_id DROP NOT NULL;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS customer_name TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS customer_id TEXT REFERENCES customers(id);
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS unit_price_cents INTEGER;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_terms TEXT;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS deposit_reference TEXT;
@@ -144,4 +161,6 @@ CREATE INDEX IF NOT EXISTS idx_showtimes_movie ON showtimes(movie_id);
 CREATE INDEX IF NOT EXISTS idx_seats_showtime ON seats(showtime_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings(user_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_showtime ON bookings(showtime_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_customer ON bookings(customer_id);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 CREATE INDEX IF NOT EXISTS idx_movie_votes_movie ON movie_votes(movie_id);
