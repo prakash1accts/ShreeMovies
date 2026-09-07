@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import { createAdminBookingAction } from "@/app/actions/admin";
 import { lookupCustomerByPhoneAction } from "@/app/actions/customers";
+import { previewPromoCodeAction } from "@/app/actions/promotions";
 import type { Seat } from "@/lib/types";
 import type { ShowtimeWithMovie } from "@/lib/data";
 import { formatVenueDateTime } from "@/lib/timezone";
@@ -28,6 +29,30 @@ export default function AdminBookingForm({
   const [customerPhone, setCustomerPhone] = useState("+244");
   const [customerName, setCustomerName] = useState("");
   const [lookupStatus, setLookupStatus] = useState<"idle" | "checking" | "found" | "new">("idle");
+
+  const [promoCode, setPromoCode] = useState("");
+  const [promoDiscount, setPromoDiscount] = useState<number | null>(null);
+  const [promoStatus, setPromoStatus] = useState<"idle" | "checking" | "valid" | "invalid">(
+    "idle"
+  );
+
+  async function handlePromoBlur() {
+    const code = promoCode.trim();
+    if (!code) {
+      setPromoStatus("idle");
+      setPromoDiscount(null);
+      return;
+    }
+    setPromoStatus("checking");
+    const result = await previewPromoCodeAction(code, showtimeId);
+    if (result) {
+      setPromoDiscount(result.discountPercent);
+      setPromoStatus("valid");
+    } else {
+      setPromoDiscount(null);
+      setPromoStatus("invalid");
+    }
+  }
 
   // Looks the phone number up in the master customer directory the moment
   // the admin finishes typing it (on blur) — an existing customer's name
@@ -69,6 +94,11 @@ export default function AdminBookingForm({
   function handleShowtimeChange(id: string) {
     setShowtimeId(id);
     setSelectedSeats(new Set());
+    // A promo code can be locked to one specific showtime, so a code that
+    // checked out for the previous selection may no longer apply here —
+    // clear it rather than leave a stale discount showing.
+    setPromoStatus("idle");
+    setPromoDiscount(null);
     const st = showtimes.find((s) => s.id === id);
     if (st) setUnitPrice((st.price_cents / 100).toFixed(2));
   }
@@ -87,7 +117,9 @@ export default function AdminBookingForm({
     });
   }
 
-  const total = (Number(unitPrice) || 0) * ticketCount;
+  const rawTotal = (Number(unitPrice) || 0) * ticketCount;
+  const discountAmount = promoStatus === "valid" && promoDiscount ? (rawTotal * promoDiscount) / 100 : 0;
+  const total = rawTotal - discountAmount;
   const manualCountOk = autoAllocate === "no" ? selectedSeats.size === ticketCount : true;
 
   return (
@@ -179,10 +211,39 @@ export default function AdminBookingForm({
         </div>
 
         <div>
+          <label className="mb-1 block text-sm text-neutral-300">Promo code (optional)</label>
+          <input
+            name="promoCode"
+            value={promoCode}
+            onChange={(e) => {
+              setPromoCode(e.target.value);
+              setPromoStatus("idle");
+              setPromoDiscount(null);
+            }}
+            onBlur={handlePromoBlur}
+            placeholder="e.g. YASIN-7970"
+            className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500"
+          />
+          <p className="mt-1 text-xs text-neutral-500">
+            {promoStatus === "checking"
+              ? "Checking…"
+              : promoStatus === "valid"
+              ? `✓ ${promoDiscount}% off applied.`
+              : promoStatus === "invalid"
+              ? "Not valid for this showtime, or already used."
+              : "Leave blank if there's no code for this sale."}
+          </p>
+        </div>
+
+        <div>
           <label className="mb-1 block text-sm text-neutral-300">Total value</label>
           <input
             readOnly
-            value={`AOA ${total.toFixed(2)}`}
+            value={
+              discountAmount > 0
+                ? `AOA ${total.toFixed(2)} (${promoDiscount}% off AOA ${rawTotal.toFixed(2)})`
+                : `AOA ${total.toFixed(2)}`
+            }
             className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-400"
           />
         </div>
