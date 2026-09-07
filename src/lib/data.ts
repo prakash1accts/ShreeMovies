@@ -289,9 +289,11 @@ const SHOWTIME_JOIN = `
 `;
 const SHOWTIME_SELECT = `SELECT st.*, m.title as movie_title, sc.name as screen_name, th.name as theater_name`;
 
+// Customer-facing (movie detail page), so a closed showtime never appears
+// as bookable again.
 export async function listShowtimesForMovie(movieId: string): Promise<ShowtimeWithMovie[]> {
   const { rows } = await query<ShowtimeWithMovie>(
-    `${SHOWTIME_SELECT} ${SHOWTIME_JOIN} WHERE st.movie_id = $1 ORDER BY st.starts_at ASC`,
+    `${SHOWTIME_SELECT} ${SHOWTIME_JOIN} WHERE st.movie_id = $1 AND st.closed_at IS NULL ORDER BY st.starts_at ASC`,
     [movieId]
   );
   return rows;
@@ -302,6 +304,46 @@ export async function listAllShowtimes(): Promise<ShowtimeWithMovie[]> {
     `${SHOWTIME_SELECT} ${SHOWTIME_JOIN} ORDER BY st.starts_at ASC`
   );
   return rows;
+}
+
+// Every showtime that hasn't been closed yet — what the day-to-day admin
+// Showtimes dashboard shows, so a closed showtime (its screening is done)
+// stops cluttering the operational list. Reports still uses listAllShowtimes
+// above so closed showtimes remain fully selectable there for historical
+// CSVs/printouts.
+export async function listActiveShowtimes(): Promise<ShowtimeWithMovie[]> {
+  const { rows } = await query<ShowtimeWithMovie>(
+    `${SHOWTIME_SELECT} ${SHOWTIME_JOIN} WHERE st.closed_at IS NULL ORDER BY st.starts_at ASC`
+  );
+  return rows;
+}
+
+// Showtimes an admin has explicitly closed — most-recently-closed screening
+// first, so the admin Showtimes page's "Closed shows" section reads newest
+// on top.
+export async function listClosedShowtimes(): Promise<ShowtimeWithMovie[]> {
+  const { rows } = await query<ShowtimeWithMovie>(
+    `${SHOWTIME_SELECT} ${SHOWTIME_JOIN} WHERE st.closed_at IS NOT NULL ORDER BY st.starts_at DESC`
+  );
+  return rows;
+}
+
+// Closes a showtime once its screening is done — hides it from every
+// customer-facing and day-to-day admin screen (homepage, movie page, new
+// walk-in booking, the active Showtimes dashboard) without touching a
+// single booking, seat, or ticket record: this only ever sets a timestamp,
+// never deletes anything, so every booking reference and ticket count stays
+// fully intact for Reports/CSV lookups later. Reversible via
+// reopenShowtime below. COALESCE means re-closing an already-closed
+// showtime never overwrites the original close time.
+export async function closeShowtime(id: string): Promise<void> {
+  await query("UPDATE showtimes SET closed_at = COALESCE(closed_at, now()) WHERE id = $1", [id]);
+}
+
+// Undoes a close — e.g. it was closed by mistake, or a walk-in sale needs
+// to be added after all.
+export async function reopenShowtime(id: string): Promise<void> {
+  await query("UPDATE showtimes SET closed_at = NULL WHERE id = $1", [id]);
 }
 
 // Batch-computes, per showtime, how many paid seats have been admitted at
@@ -337,7 +379,7 @@ export async function getAdmissionStatsForShowtimes(
 // happened.
 export async function listUpcomingShowtimes(): Promise<ShowtimeWithMovie[]> {
   const { rows } = await query<ShowtimeWithMovie>(
-    `${SHOWTIME_SELECT} ${SHOWTIME_JOIN} WHERE st.starts_at >= now() ORDER BY st.starts_at ASC`
+    `${SHOWTIME_SELECT} ${SHOWTIME_JOIN} WHERE st.starts_at >= now() AND st.closed_at IS NULL ORDER BY st.starts_at ASC`
   );
   return rows;
 }
@@ -893,7 +935,7 @@ export async function createAdminBooking(params: {
   customerName: string;
   unitPriceCents: number;
   totalCents: number;
-  paymentTerms: "cash" | "deposit";
+  paymentTerms: "cash" | "deposit" | "cash_due";
   depositReference?: string;
   depositDate?: string;
 }): Promise<Booking> {
@@ -984,7 +1026,7 @@ export async function updateBookingSeats(
   pricing?: {
     unitPriceCents: number;
     totalCents: number;
-    paymentTerms: "cash" | "deposit";
+    paymentTerms: "cash" | "deposit" | "cash_due";
     depositReference: string | null;
     depositDate: string | null;
   }
@@ -1350,6 +1392,37 @@ export async function markBookingCheckedIn(bookingId: string): Promise<Booking> 
   );
   if (!rows[0]) throw new Error("BOOKING_NOT_FOUND");
   return rows[0];
+}
+
+// Clears admission for every booking under one showtime — the undo for a
+// batch of test/practice scans (e.g. staff trying out the scanner before
+// doors actually open) so the real admitted count starts at zero instead of
+// carrying leftover test entries. Only touches bookings that were actually
+// marked admitted, and returns how many that was so the caller can confirm
+// back to whoever clicked it.
+export async function resetCheckInsForShowtime(showtimeId: string): Promise<number> {
+  const { rows } = await query<{ id: string }>(
+    "UPDATE bookings SET checked_in_at = NULL WHERE showtime_id = $1 AND checked_in_at IS NOT NULL RETURNING id",
+    [showtimeId]
+  );
+  return rows.length;
+}
+
+// Flips a "cash due at the door" booking to settled once staff actually
+// collect the cash — called from the ticket-scan screen's "Cash collected"
+// tap so the CASH DUE alert stops firing on every future scan of the same
+// ticket. Only ever transitions a booking that's currently 'cash_due': a
+// double-tap (or a stale scan result) is a no-op rather than something that
+// could overwrite a genuine 'deposit' or already-settled 'cash' booking.
+export async function markCashCollected(bookingId: string): Promise<Booking> {
+  const { rows } = await query<Booking>(
+    "UPDATE bookings SET payment_terms = 'cash' WHERE id = $1 AND payment_terms = 'cash_due' RETURNING *",
+    [bookingId]
+  );
+  if (rows[0]) return rows[0];
+  const existing = await getBooking(bookingId);
+  if (!existing) throw new Error("BOOKING_NOT_FOUND");
+  return existing;
 }
 
 export async function getBookingSeatIds(bookingId: string): Promise<string[]> {
