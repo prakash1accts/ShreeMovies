@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { createAdminBookingAction } from "@/app/actions/admin";
+import { lookupCustomerByPhoneAction } from "@/app/actions/customers";
 import type { Seat } from "@/lib/types";
 import type { ShowtimeWithMovie } from "@/lib/data";
 import { formatVenueDateTime } from "@/lib/timezone";
@@ -23,6 +24,29 @@ export default function AdminBookingForm({
   const [autoAllocate, setAutoAllocate] = useState<"yes" | "no">("yes");
   const [paymentTerms, setPaymentTerms] = useState<"cash" | "deposit" | "cash_due">("cash");
   const [selectedSeats, setSelectedSeats] = useState<Set<string>>(new Set());
+
+  const [customerPhone, setCustomerPhone] = useState("+244");
+  const [customerName, setCustomerName] = useState("");
+  const [lookupStatus, setLookupStatus] = useState<"idle" | "checking" | "found" | "new">("idle");
+
+  // Looks the phone number up in the master customer directory the moment
+  // the admin finishes typing it (on blur) — an existing customer's name
+  // gets filled in automatically instead of being retyped every visit.
+  async function handlePhoneBlur() {
+    const phone = customerPhone.trim();
+    if (!phone || phone === "+244") {
+      setLookupStatus("idle");
+      return;
+    }
+    setLookupStatus("checking");
+    const match = await lookupCustomerByPhoneAction(phone);
+    if (match) {
+      setCustomerName(match.name);
+      setLookupStatus("found");
+    } else {
+      setLookupStatus("new");
+    }
+  }
 
   const seats = useMemo(
     () => seatsByShowtime[showtimeId] ?? [],
@@ -90,10 +114,37 @@ export default function AdminBookingForm({
         </div>
 
         <div>
+          <label className="mb-1 block text-sm text-neutral-300">Phone number</label>
+          <input
+            name="customerPhone"
+            required
+            value={customerPhone}
+            onChange={(e) => {
+              setCustomerPhone(e.target.value);
+              setLookupStatus("idle");
+            }}
+            onBlur={handlePhoneBlur}
+            placeholder="+244923456789"
+            className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
+          />
+          <p className="mt-1 text-xs text-neutral-500">
+            {lookupStatus === "checking"
+              ? "Checking…"
+              : lookupStatus === "found"
+              ? "✓ Existing customer — name filled in below."
+              : lookupStatus === "new"
+              ? "New number — enter their name below."
+              : "Include the country code, e.g. +244 for Angola or +91 for India."}
+          </p>
+        </div>
+
+        <div>
           <label className="mb-1 block text-sm text-neutral-300">Customer name</label>
           <input
             name="customerName"
             required
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
             className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
           />
         </div>
