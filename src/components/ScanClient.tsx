@@ -1,7 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { scanLookupAction, scanCheckInAction, type ScanLookupResult } from "@/app/actions/admin";
+import {
+  scanLookupAction,
+  scanCheckInAction,
+  markCashCollectedAction,
+  type ScanLookupResult,
+} from "@/app/actions/admin";
 import { formatVenueDateTime, formatVenueTime } from "@/lib/timezone";
 
 // Continuous-scanning screen for the door: a handheld 2D/QR scanner behaves
@@ -18,6 +23,13 @@ export default function ScanClient() {
   const [admitting, setAdmitting] = useState(false);
   const [result, setResult] = useState<ScanLookupResult | null>(null);
   const [scanCount, setScanCount] = useState(0);
+  const [markingCash, setMarkingCash] = useState(false);
+  // Whether the gate-alert popup for the *current* result has been
+  // dismissed. Reset to false only when a brand-new scan comes in
+  // (handleSubmit) — not when the same result is refreshed in place (Admit,
+  // Cash collected), so re-confirming or admitting the same ticket never
+  // re-pops an alert the gatekeeper already acknowledged.
+  const [alertDismissed, setAlertDismissed] = useState(false);
 
   function vibrate(pattern: number | number[]) {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -48,10 +60,26 @@ export default function ScanClient() {
     try {
       const res = await scanLookupAction(raw);
       setResult(res);
+      setAlertDismissed(false);
       setScanCount((n) => n + 1);
-      vibrate(res.found && res.status === "paid" && !res.checkedInAt ? 60 : [80, 60, 80]);
+      const needsGateAlert =
+        res.found &&
+        res.status !== "cancelled" &&
+        (Boolean(res.seatsChangedNote) || res.paymentTerms === "cash_due");
+      // A distinct, longer buzz pattern for "read this before you admit
+      // them" — different enough from the plain valid/invalid buzz below
+      // that staff learn to glance at the screen instead of waving the
+      // customer through on feel alone.
+      vibrate(
+        needsGateAlert
+          ? [120, 80, 120, 80, 120]
+          : res.found && res.status === "paid" && !res.checkedInAt
+          ? 60
+          : [80, 60, 80]
+      );
     } catch {
       setResult({ found: false, ref: raw });
+      setAlertDismissed(false);
       vibrate([80, 60, 80]);
     } finally {
       setPending(false);
@@ -71,6 +99,34 @@ export default function ScanClient() {
       inputRef.current?.focus();
     }
   }
+
+  // Settles a CASH DUE ticket once staff actually take the money — updates
+  // the result in place so the CASH DUE reminder stops showing for the rest
+  // of this scan (and any future re-scan of the same ticket).
+  async function handleMarkCashCollected() {
+    if (!result || !result.found) return;
+    setMarkingCash(true);
+    try {
+      const res = await markCashCollectedAction(result.bookingId, result.ref);
+      setResult(res);
+    } finally {
+      setMarkingCash(false);
+      inputRef.current?.focus();
+    }
+  }
+
+  // A ticket needs the gate-alert popup when its seats were changed after
+  // payment, or it's still owed cash — either way, staff should read this
+  // before waving the customer through, not just glance at the plain
+  // VALID/CANCELLED banner. Cancelled tickets are excluded: they're never
+  // admitted anyway, so neither warning is actionable there.
+  const hasSeatChange = Boolean(
+    result?.found && result.status !== "cancelled" && result.seatsChangedNote
+  );
+  const hasCashDue = Boolean(
+    result?.found && result.status !== "cancelled" && result.paymentTerms === "cash_due"
+  );
+  const showGateAlert = !alertDismissed && (hasSeatChange || hasCashDue);
 
   const status = !result
     ? null
@@ -174,9 +230,17 @@ export default function ScanClient() {
                 </div>
                 <div>
                   <div className="text-neutral-500">Payment</div>
-                  <div className="font-medium">
+                  <div
+                    className={
+                      result.paymentTerms === "cash_due"
+                        ? "font-semibold text-amber-400"
+                        : "font-medium"
+                    }
+                  >
                     {result.paymentTerms === "deposit"
                       ? "Deposit"
+                      : result.paymentTerms === "cash_due"
+                      ? "Cash Due"
                       : result.paymentTerms === "cash"
                       ? "Cash"
                       : "Online"}
@@ -189,6 +253,74 @@ export default function ScanClient() {
                   ⚠ {result.seatsChangedNote}
                 </div>
               )}
+
+              {result.paymentTerms === "cash_due" && (
+                <div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-xs text-amber-300">
+                  <span>💵 Cash still due — collect before admitting.</span>
+                  <button
+                    type="button"
+                    onClick={handleMarkCashCollected}
+                    disabled={markingCash}
+                    className="shrink-0 rounded-md bg-amber-800/60 px-2 py-1 text-amber-100 hover:bg-amber-700/60 disabled:opacity-50"
+                  >
+                    {markingCash ? "Saving…" : "Cash collected"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Gate-alert popup: automatically shown on a fresh scan whose
+              ticket has a seat change and/or cash still due, so staff can't
+              miss it by only glancing at the plain VALID/CANCELLED banner.
+              Not a native browser confirm()/alert() — those block all
+              further scanner input until dismissed by a click the hardware
+              scanner can't provide. */}
+          {result && result.found && showGateAlert && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+              <div className="w-full max-w-sm rounded-lg border-2 border-amber-600 bg-neutral-900 p-5 shadow-xl">
+                <div className="text-center text-lg font-bold text-amber-300">
+                  {hasSeatChange && hasCashDue
+                    ? "⚠️ SEATS CHANGED + 💵 CASH DUE"
+                    : hasSeatChange
+                    ? "⚠️ SEATS CHANGED"
+                    : "💵 CASH DUE"}
+                </div>
+                <div className="mt-1 text-center text-sm text-neutral-400">
+                  {result.customerName} · Seats {result.seatLabels}
+                </div>
+
+                {hasSeatChange && (
+                  <p className="mt-3 rounded-md border border-amber-800 bg-amber-950/40 p-3 text-xs text-amber-200">
+                    {result.seatsChangedNote}
+                  </p>
+                )}
+                {hasCashDue && (
+                  <p className="mt-3 rounded-md border border-amber-800 bg-amber-950/40 p-3 text-center text-sm font-semibold text-amber-200">
+                    Collect AOA {(result.totalCents / 100).toFixed(2)} cash before admitting.
+                  </p>
+                )}
+
+                <div className="mt-4 flex gap-2">
+                  {hasCashDue && (
+                    <button
+                      type="button"
+                      onClick={handleMarkCashCollected}
+                      disabled={markingCash}
+                      className="flex-1 rounded-md bg-green-700 px-3 py-2 text-sm font-medium text-white hover:bg-green-600 disabled:opacity-50"
+                    >
+                      {markingCash ? "Saving…" : "Cash collected"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAlertDismissed(true)}
+                    className="flex-1 rounded-md bg-neutral-800 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-700"
+                  >
+                    Got it — continue
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
