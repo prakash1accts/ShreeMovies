@@ -2,6 +2,7 @@ import { clientQuery, genId, query, withTransaction } from "./db";
 import type {
   Booking,
   BookingStatus,
+  Customer,
   Movie,
   MovieVoteCounts,
   Screen,
@@ -84,6 +85,52 @@ export async function setUserBlocked(userId: string, blocked: boolean): Promise<
     [blocked, userId]
   );
   if (!rows[0]) throw new Error("USER_NOT_FOUND");
+  return rows[0];
+}
+
+// ---------- Customers (master phone -> name directory) ----------
+//
+// This is intentionally separate from `users` (online login accounts) —
+// see the comment on the `Customer` type. Every booking flow (admin walk-in,
+// online signup) is expected to call upsertCustomer() with whatever phone +
+// name it collects, so the directory only ever grows more complete, and
+// findCustomerByPhone() so a previously-seen number can autofill a name
+// instead of asking for it again.
+
+export async function findCustomerByPhone(phone: string): Promise<Customer | undefined> {
+  const normalized = phone.trim();
+  if (!normalized) return undefined;
+  const { rows } = await query<Customer>("SELECT * FROM customers WHERE phone = $1", [
+    normalized,
+  ]);
+  return rows[0];
+}
+
+export async function getCustomerById(id: string): Promise<Customer | undefined> {
+  const { rows } = await query<Customer>("SELECT * FROM customers WHERE id = $1", [id]);
+  return rows[0];
+}
+
+// Creates the master record the first time a phone number is seen, or
+// updates the name/WhatsApp on file when that same number is used again —
+// so the directory always reflects the most recently given name for a
+// number rather than freezing on whatever was typed first.
+export async function upsertCustomer(params: {
+  phone: string;
+  name: string;
+  whatsapp?: string | null;
+}): Promise<Customer> {
+  const id = genId("cus");
+  const { rows } = await query<Customer>(
+    `INSERT INTO customers (id, phone, name, whatsapp)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (phone) DO UPDATE SET
+       name = EXCLUDED.name,
+       whatsapp = COALESCE(EXCLUDED.whatsapp, customers.whatsapp),
+       updated_at = now()
+     RETURNING *`,
+    [id, params.phone.trim(), params.name.trim(), params.whatsapp?.trim() || null]
+  );
   return rows[0];
 }
 
@@ -933,6 +980,7 @@ export async function createAdminBooking(params: {
   showtimeId: string;
   seatIds: string[];
   customerName: string;
+  customerId?: string | null;
   unitPriceCents: number;
   totalCents: number;
   paymentTerms: "cash" | "deposit" | "cash_due";
@@ -977,16 +1025,17 @@ export async function createAdminBooking(params: {
     const { rows } = await clientQuery<Booking>(
       client,
       `INSERT INTO bookings
-         (id, user_id, showtime_id, status, total_cents, customer_name,
+         (id, user_id, showtime_id, status, total_cents, customer_name, customer_id,
           unit_price_cents, payment_terms, deposit_reference, deposit_date, created_by_admin,
           booking_number)
-       VALUES ($1, NULL, $2, 'paid', $3, $4, $5, $6, $7, $8, true, $9)
+       VALUES ($1, NULL, $2, 'paid', $3, $4, $5, $6, $7, $8, $9, true, $10)
        RETURNING *`,
       [
         id,
         params.showtimeId,
         params.totalCents,
         params.customerName,
+        params.customerId ?? null,
         params.unitPriceCents,
         params.paymentTerms,
         params.depositReference ?? null,
@@ -1029,6 +1078,14 @@ export async function updateBookingSeats(
     paymentTerms: "cash" | "deposit" | "cash_due";
     depositReference: string | null;
     depositDate: string | null;
+  },
+  // Same idea as `pricing` — applied in the same save when the admin's Edit
+  // Booking screen is used to backfill or correct a customer's name/phone
+  // against the master directory. Omitted entirely for callers that don't
+  // touch customer info.
+  customer?: {
+    customerName: string;
+    customerId: string | null;
   }
 ): Promise<Booking> {
   return withTransaction(async (client) => {
@@ -1138,6 +1195,13 @@ export async function updateBookingSeats(
           pricing.depositDate,
           bookingId,
         ]
+      );
+    }
+
+    if (customer) {
+      await client.query(
+        `UPDATE bookings SET customer_name = $1, customer_id = $2 WHERE id = $3`,
+        [customer.customerName, customer.customerId, bookingId]
       );
     }
 
@@ -1336,11 +1400,17 @@ export async function linkBookingToUser(bookingId: string, userId: string): Prom
 const BOOKING_DETAILS_SELECT = `
   SELECT b.*, m.title as movie_title, m.poster_url as movie_poster_url, st.starts_at as starts_at,
          sc.name as screen_name,
-         u.phone as account_phone, u.whatsapp as account_whatsapp,
+         -- Walk-in bookings link to the master customers directory via
+         -- customer_id; online bookings carry phone/WhatsApp on their user
+         -- account instead. Either can be missing (older bookings predate
+         -- both), hence the fallback chain.
+         COALESCE(c.phone, u.phone) as account_phone,
+         COALESCE(c.whatsapp, u.whatsapp) as account_whatsapp,
          -- Walk-in bookings store the name directly on the booking; online
-         -- bookings don't, so fall back to the account holder's name. Listed
-         -- after b.* so it overwrites b.customer_name in the result row.
-         COALESCE(b.customer_name, u.name) as customer_name,
+         -- bookings don't, so fall back to the master directory, then the
+         -- account holder's name. Listed after b.* so it overwrites
+         -- b.customer_name in the result row.
+         COALESCE(b.customer_name, c.name, u.name) as customer_name,
          (SELECT string_agg(s.row_label || s.col_number, ', ')
           FROM booking_seats bs JOIN seats s ON s.id = bs.seat_id
           WHERE bs.booking_id = b.id) as seat_labels
@@ -1349,6 +1419,7 @@ const BOOKING_DETAILS_SELECT = `
   JOIN movies m ON m.id = st.movie_id
   JOIN screens sc ON sc.id = st.screen_id
   LEFT JOIN users u ON u.id = b.user_id
+  LEFT JOIN customers c ON c.id = b.customer_id
 `;
 
 export async function listBookingsForUser(userId: string): Promise<BookingWithDetails[]> {
