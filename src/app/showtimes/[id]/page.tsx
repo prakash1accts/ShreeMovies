@@ -35,14 +35,20 @@ export default async function ShowtimePage({
         </p>
       </div>
 
-      <SeatPicker
-        showtimeId={showtime.id}
-        seats={seats}
-        priceCents={showtime.price_cents}
-        holdMinutes={showtime.hold_minutes}
-        isLoggedIn={Boolean(session)}
-        returnTo={`/showtimes/${showtime.id}`}
-      />
+      {showtime.closed_at ? (
+        <div className="mx-auto max-w-md rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-center text-neutral-400">
+          This showtime is closed and no longer accepting bookings.
+        </div>
+      ) : (
+        <SeatPicker
+          showtimeId={showtime.id}
+          seats={seats}
+          priceCents={showtime.price_cents}
+          holdMinutes={showtime.hold_minutes}
+          isLoggedIn={Boolean(session)}
+          returnTo={`/showtimes/${showtime.id}`}
+        />
+      )}
     </div>
   );
 }
