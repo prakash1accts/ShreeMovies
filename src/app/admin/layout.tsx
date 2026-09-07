@@ -68,6 +68,12 @@ export default async function AdminLayout({
         >
           Customers
         </Link>
+        <Link
+          href="/admin/promotions"
+          className="rounded-md px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
+        >
+          Promotions
+        </Link>
       </div>
       {children}
     </div>
