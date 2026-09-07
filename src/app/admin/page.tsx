@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { listAllBookings, listMovies, listAllShowtimes } from "@/lib/data";
+import { listAllBookings, listMovies, listActiveShowtimes } from "@/lib/data";
 
 export default async function AdminOverviewPage() {
   const [movies, showtimes, bookings] = await Promise.all([
     listMovies(),
-    listAllShowtimes(),
+    listActiveShowtimes(),
     listAllBookings(),
   ]);
   const paidBookings = bookings.filter((b) => b.status === "paid");
