@@ -1366,6 +1366,20 @@ export async function listAllBookings(): Promise<BookingWithDetails[]> {
   return rows;
 }
 
+// Same as listAllBookings, but drops anything under a closed showtime — this
+// is what the day-to-day admin Bookings list uses, since once a show is
+// closed there's nothing left to action on those bookings (no one to admit,
+// nothing to edit or cancel). The full history — including closed shows —
+// stays available via listAllBookings, which only Reports uses, so revenue
+// and ticket counts are never lost, just no longer cluttering the working
+// list.
+export async function listActiveBookings(): Promise<BookingWithDetails[]> {
+  const { rows } = await query<BookingWithDetails>(
+    `${BOOKING_DETAILS_SELECT} WHERE st.closed_at IS NULL ORDER BY b.created_at DESC`
+  );
+  return rows;
+}
+
 // Looks up a booking for the ticket QR / staff verification screen — by its
 // human-friendly booking_number first (what's actually encoded in the QR
 // code), falling back to the raw booking id for older/edge-case bookings
