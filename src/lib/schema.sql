@@ -57,9 +57,17 @@ CREATE TABLE IF NOT EXISTS showtimes (
   -- released back to 'available' if payment isn't confirmed. Per-showtime
   -- (not global) so a high-demand showtime can be given more breathing room
   -- than the default without affecting every other showtime.
-  hold_minutes INTEGER NOT NULL DEFAULT 15
+  hold_minutes INTEGER NOT NULL DEFAULT 15,
+  -- Set once a screening is done and an admin "closes" it — hides it from
+  -- every customer-facing and day-to-day admin screen (homepage, movie
+  -- page, new walk-in booking, the active Showtimes dashboard) without
+  -- touching a single booking/seat/ticket row, so its booking references
+  -- and ticket counts stay fully intact for Reports lookups later. Null
+  -- means still active/open. Reversible (an admin can reopen it).
+  closed_at TIMESTAMPTZ
 );
 ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS hold_minutes INTEGER NOT NULL DEFAULT 15;
+ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
 
 -- One row per seat per showtime, created at showtime-creation time
 CREATE TABLE IF NOT EXISTS seats (
