@@ -106,6 +106,11 @@ export interface Booking {
   created_by_admin: boolean;
   checked_in_at: string | null;
   created_at: string;
+  // Set when a promo code was redeemed for this booking — the code text
+  // itself (for display/receipts) and the amount actually knocked off
+  // total_cents. discount_cents is 0 (never null) when no code was used.
+  promo_code: string | null;
+  discount_cents: number;
 }
 
 // Master phone -> name directory. Deliberately separate from `User` (which
@@ -127,6 +132,24 @@ export interface SessionUser {
   name: string;
   email: string;
   role: Role;
+}
+
+// A discount code, e.g. for a WhatsApp campaign offering people who saw one
+// movie a percentage off an upcoming show. Deliberately single-use (see
+// used_at) rather than a general coupon anyone can apply repeatedly —
+// customer_id and/or showtime_id, when set, lock it to one specific
+// customer and/or one specific showtime so a forwarded/leaked code can't be
+// redeemed outside its intended audience or show.
+export interface PromoCode {
+  id: string;
+  code: string;
+  discount_percent: number;
+  customer_id: string | null;
+  showtime_id: string | null;
+  // Null = still redeemable. Set the moment it's successfully applied to a
+  // booking — see claimPromoCode()/releasePromoCode() in data.ts.
+  used_at: string | null;
+  created_at: string;
 }
 
 export type VoteValue = "up" | "down";
