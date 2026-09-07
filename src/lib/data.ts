@@ -5,6 +5,7 @@ import type {
   Customer,
   Movie,
   MovieVoteCounts,
+  PromoCode,
   Screen,
   ScreenLayout,
   Seat,
@@ -157,6 +158,98 @@ export async function setUserPassword(userId: string, passwordHash: string): Pro
   );
   if (!rows[0]) throw new Error("USER_NOT_FOUND");
   return rows[0];
+}
+
+// ---------- Promo codes ----------
+//
+// Single-use discount codes — e.g. a WhatsApp campaign offering people who
+// saw one movie a percentage off an upcoming show. See the `PromoCode` type
+// for how customer_id/showtime_id lock a code to its intended audience.
+
+// Looks up a code as redeemable right now for the given showtime: it must
+// exist, not already be used, and (if it's showtime-locked) match this
+// exact showtime. Does NOT mark it used — that's claimPromoCode(), called
+// only once the booking it's for is actually about to be created, so a
+// preview (e.g. showing the discount before the customer submits) never
+// burns the code by itself.
+export async function getRedeemablePromoCode(
+  code: string,
+  showtimeId: string
+): Promise<PromoCode | undefined> {
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return undefined;
+  const { rows } = await query<PromoCode>(
+    `SELECT * FROM promo_codes
+     WHERE code = $1 AND used_at IS NULL
+       AND (showtime_id IS NULL OR showtime_id = $2)`,
+    [normalized, showtimeId]
+  );
+  return rows[0];
+}
+
+// Atomically claims a code so two simultaneous redemption attempts can't
+// both succeed — returns undefined if it was already used (or never
+// existed) by the time this runs, which the caller should treat as "someone
+// else just used it, stop and don't create the booking".
+export async function claimPromoCode(id: string): Promise<PromoCode | undefined> {
+  const { rows } = await query<PromoCode>(
+    "UPDATE promo_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL RETURNING *",
+    [id]
+  );
+  return rows[0];
+}
+
+// Hands a code back if the booking it was just claimed for then failed to
+// create for an unrelated reason (e.g. the seats were taken in the same
+// instant) — so a customer never loses their one-time code over a failure
+// that wasn't about the code at all.
+export async function releasePromoCode(id: string): Promise<void> {
+  await query("UPDATE promo_codes SET used_at = NULL WHERE id = $1", [id]);
+}
+
+export async function createPromoCode(params: {
+  code: string;
+  discountPercent: number;
+  customerId?: string | null;
+  showtimeId?: string | null;
+}): Promise<PromoCode> {
+  const id = genId("promo");
+  const { rows } = await query<PromoCode>(
+    `INSERT INTO promo_codes (id, code, discount_percent, customer_id, showtime_id)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [
+      id,
+      params.code.trim().toUpperCase(),
+      params.discountPercent,
+      params.customerId ?? null,
+      params.showtimeId ?? null,
+    ]
+  );
+  return rows[0];
+}
+
+export interface PromoCodeWithDetails extends PromoCode {
+  customer_name: string | null;
+  showtime_label: string | null;
+}
+
+// For the admin Promotions list — newest first, with the showtime and
+// customer it's locked to (if any) resolved to something readable instead
+// of raw ids.
+export async function listPromoCodes(): Promise<PromoCodeWithDetails[]> {
+  const { rows } = await query<PromoCodeWithDetails>(
+    `SELECT p.*, c.name as customer_name,
+            CASE WHEN st.id IS NOT NULL
+              THEN m.title || ' — ' || to_char(st.starts_at, 'DD Mon YYYY HH24:MI')
+              ELSE NULL
+            END as showtime_label
+     FROM promo_codes p
+     LEFT JOIN customers c ON c.id = p.customer_id
+     LEFT JOIN showtimes st ON st.id = p.showtime_id
+     LEFT JOIN movies m ON m.id = st.movie_id
+     ORDER BY p.created_at DESC`
+  );
+  return rows;
 }
 
 // ---------- Movies ----------
@@ -945,6 +1038,11 @@ export async function createPendingBooking(params: {
   showtimeId: string;
   seatIds: string[];
   totalCents: number;
+  // Set together when a promo code was redeemed for this booking — see
+  // getRedeemablePromoCode()/claimPromoCode() below. totalCents is expected
+  // to already have discountCents subtracted out by the caller.
+  promoCode?: string | null;
+  discountCents?: number;
 }): Promise<Booking> {
   const id = genId("bkg");
 
@@ -965,8 +1063,16 @@ export async function createPendingBooking(params: {
 
     const { rows } = await clientQuery<Booking>(
       client,
-      "INSERT INTO bookings (id, user_id, showtime_id, status, total_cents) VALUES ($1, $2, $3, 'pending', $4) RETURNING *",
-      [id, params.userId, params.showtimeId, params.totalCents]
+      `INSERT INTO bookings (id, user_id, showtime_id, status, total_cents, promo_code, discount_cents)
+       VALUES ($1, $2, $3, 'pending', $4, $5, $6) RETURNING *`,
+      [
+        id,
+        params.userId,
+        params.showtimeId,
+        params.totalCents,
+        params.promoCode ?? null,
+        params.discountCents ?? 0,
+      ]
     );
 
     for (const seatId of params.seatIds) {
@@ -996,6 +1102,11 @@ export async function createAdminBooking(params: {
   paymentTerms: "cash" | "deposit" | "cash_due";
   depositReference?: string;
   depositDate?: string;
+  // Set together when a promo code was redeemed for this walk-in sale — see
+  // getRedeemablePromoCode()/claimPromoCode() below. totalCents is expected
+  // to already have discountCents subtracted out by the caller.
+  promoCode?: string | null;
+  discountCents?: number;
 }): Promise<Booking> {
   const id = genId("bkg");
 
@@ -1037,8 +1148,8 @@ export async function createAdminBooking(params: {
       `INSERT INTO bookings
          (id, user_id, showtime_id, status, total_cents, customer_name, customer_id,
           unit_price_cents, payment_terms, deposit_reference, deposit_date, created_by_admin,
-          booking_number)
-       VALUES ($1, NULL, $2, 'paid', $3, $4, $5, $6, $7, $8, $9, true, $10)
+          booking_number, promo_code, discount_cents)
+       VALUES ($1, NULL, $2, 'paid', $3, $4, $5, $6, $7, $8, $9, true, $10, $11, $12)
        RETURNING *`,
       [
         id,
@@ -1051,6 +1162,8 @@ export async function createAdminBooking(params: {
         params.depositReference ?? null,
         params.depositDate ?? null,
         bookingNumber,
+        params.promoCode ?? null,
+        params.discountCents ?? 0,
       ]
     );
 
