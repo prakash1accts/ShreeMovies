@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
+import { lookupCustomerByPhoneAction } from "@/app/actions/customers";
 
 type ActionState = { error?: string } | undefined;
 
@@ -17,6 +18,32 @@ export default function AuthForm({
   next?: string;
 }) {
   const [state, formAction, isPending] = useActionState(action, undefined);
+
+  const [phone, setPhone] = useState("+244");
+  const [name, setName] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [lookupStatus, setLookupStatus] = useState<"idle" | "checking" | "found" | "new">("idle");
+
+  // Same master-directory lookup used on the admin side: if this phone
+  // number already has a name on file (e.g. from a walk-in box-office
+  // visit), fill it in automatically instead of asking the customer to
+  // retype it.
+  async function handlePhoneBlur() {
+    const trimmed = phone.trim();
+    if (!trimmed || trimmed === "+244") {
+      setLookupStatus("idle");
+      return;
+    }
+    setLookupStatus("checking");
+    const match = await lookupCustomerByPhoneAction(trimmed);
+    if (match) {
+      setName(match.name);
+      if (match.whatsapp) setWhatsapp(match.whatsapp);
+      setLookupStatus("found");
+    } else {
+      setLookupStatus("new");
+    }
+  }
 
   return (
     <div className="mx-auto max-w-sm">
@@ -37,7 +64,44 @@ export default function AuthForm({
 
       <form action={formAction} className="mt-6 space-y-4">
         {mode === "login" && next && <input type="hidden" name="next" value={next} />}
-        {(mode === "signup" || mode === "setup") && (
+        {mode === "signup" && (
+          <div>
+            <label className="mb-1 block text-sm text-neutral-300">Phone number</label>
+            <input
+              type="tel"
+              name="phone"
+              required
+              value={phone}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                setLookupStatus("idle");
+              }}
+              onBlur={handlePhoneBlur}
+              placeholder="+244923456789"
+              className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-red-500"
+            />
+            <p className="mt-1 text-xs text-neutral-500">
+              {lookupStatus === "checking"
+                ? "Checking…"
+                : lookupStatus === "found"
+                ? "✓ Welcome back — we filled in your name below."
+                : "Include your country code, e.g. +244 for Angola."}
+            </p>
+          </div>
+        )}
+        {mode === "signup" && (
+          <div>
+            <label className="mb-1 block text-sm text-neutral-300">Name</label>
+            <input
+              name="name"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-red-500"
+            />
+          </div>
+        )}
+        {mode === "setup" && (
           <div>
             <label className="mb-1 block text-sm text-neutral-300">Name</label>
             <input
@@ -57,28 +121,18 @@ export default function AuthForm({
           />
         </div>
         {mode === "signup" && (
-          <>
-            <div>
-              <label className="mb-1 block text-sm text-neutral-300">Phone number</label>
-              <input
-                type="tel"
-                name="phone"
-                required
-                placeholder="e.g. 923 168 840"
-                className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-red-500"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm text-neutral-300">WhatsApp number</label>
-              <input
-                type="tel"
-                name="whatsapp"
-                required
-                placeholder="If different from your phone number above"
-                className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-red-500"
-              />
-            </div>
-          </>
+          <div>
+            <label className="mb-1 block text-sm text-neutral-300">WhatsApp number</label>
+            <input
+              type="tel"
+              name="whatsapp"
+              required
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value)}
+              placeholder="If different from your phone number above"
+              className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-red-500"
+            />
+          </div>
         )}
         <div>
           <label className="mb-1 block text-sm text-neutral-300">Password</label>
