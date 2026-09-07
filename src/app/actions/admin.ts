@@ -7,6 +7,7 @@ import {
   autoAllocateSeats,
   blockSeats,
   cancelBooking,
+  closeShowtime,
   createAdminBooking,
   createMovie,
   createScreen,
@@ -21,6 +22,9 @@ import {
   listTheaters,
   markBookingCheckedIn,
   markBookingPaid,
+  markCashCollected,
+  reopenShowtime,
+  resetCheckInsForShowtime,
   resyncShowtimeSeats,
   restoreBooking,
   setUserBlocked,
@@ -322,6 +326,43 @@ export async function resyncShowtimeSeatsAction(formData: FormData) {
   revalidatePath("/");
 }
 
+// Closes a showtime once its screening is done — removes it from every
+// customer-facing and day-to-day admin screen (homepage, movie page, new
+// walk-in booking, the active Showtimes dashboard) while leaving every
+// booking, seat, and ticket record exactly as it is, so booking references
+// and ticket counts stay available in Reports for later. movieId is passed
+// through purely so the movie's own detail page gets revalidated too — it's
+// otherwise not needed by closeShowtime itself.
+export async function closeShowtimeAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  const movieId = String(formData.get("movieId") || "");
+  if (id) await closeShowtime(id);
+  revalidatePath("/admin/showtimes");
+  revalidatePath("/admin");
+  revalidatePath("/admin/reports");
+  revalidatePath("/admin/bookings/new");
+  revalidatePath(`/showtimes/${id}`);
+  revalidatePath("/");
+  if (movieId) revalidatePath(`/movies/${movieId}`);
+}
+
+// Undoes a close — e.g. it was closed by mistake, or a walk-in sale needs to
+// be added after all.
+export async function reopenShowtimeAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  const movieId = String(formData.get("movieId") || "");
+  if (id) await reopenShowtime(id);
+  revalidatePath("/admin/showtimes");
+  revalidatePath("/admin");
+  revalidatePath("/admin/reports");
+  revalidatePath("/admin/bookings/new");
+  revalidatePath(`/showtimes/${id}`);
+  revalidatePath("/");
+  if (movieId) revalidatePath(`/movies/${movieId}`);
+}
+
 // ---------- Seat blocking (maintenance / VIP holds / etc.) ----------
 
 // Takes one or more currently-available seats out of sale for a showtime —
@@ -364,7 +405,8 @@ export async function createAdminBookingAction(
   const unitPrice = Number(formData.get("unitPrice") || 0); // dollars
   const paymentTerms = String(formData.get("paymentTerms") || "cash") as
     | "cash"
-    | "deposit";
+    | "deposit"
+    | "cash_due";
   const depositReference = String(formData.get("depositReference") || "").trim();
   const depositDate = String(formData.get("depositDate") || "").trim();
   const autoAllocate = String(formData.get("autoAllocate") || "yes") === "yes";
@@ -507,7 +549,10 @@ export async function editBookingDetailsAction(
   const bookingId = String(formData.get("bookingId") || "");
   const seatIds = formData.getAll("seatIds").map(String);
   const unitPrice = Number(formData.get("unitPrice") || 0);
-  const paymentTerms = String(formData.get("paymentTerms") || "cash") as "cash" | "deposit";
+  const paymentTerms = String(formData.get("paymentTerms") || "cash") as
+    | "cash"
+    | "deposit"
+    | "cash_due";
   const depositReference = String(formData.get("depositReference") || "").trim();
   const depositDate = String(formData.get("depositDate") || "").trim();
 
@@ -672,6 +717,32 @@ export async function scanCheckInAction(
   await requireAdmin();
   await markBookingCheckedIn(bookingId);
   revalidatePath("/admin/showtimes");
+  const booking = await getBookingByReference(ref);
+  return toScanResult(ref, booking);
+}
+
+// Undo for a batch of test scans — clears "admitted" on every booking under
+// one showtime in one go, so trying out the door scanner before a real show
+// doesn't leave phantom admissions behind. Returns how many bookings were
+// actually reset, so the reports page can confirm back exactly what changed.
+export async function resetShowtimeCheckInsAction(showtimeId: string): Promise<number> {
+  await requireAdmin();
+  const count = await resetCheckInsForShowtime(showtimeId);
+  revalidatePath("/admin/reports");
+  revalidatePath("/admin/showtimes");
+  return count;
+}
+
+// Called from the scan screen's "Cash collected" tap on a CASH DUE ticket —
+// settles the booking so that reminder stops firing on every future scan of
+// the same ticket, then re-reads it so the caller's UI reflects the change
+// immediately (mirrors scanCheckInAction's own re-read-after-write pattern).
+export async function markCashCollectedAction(
+  bookingId: string,
+  ref: string
+): Promise<ScanLookupResult> {
+  await requireAdmin();
+  await markCashCollected(bookingId);
   const booking = await getBookingByReference(ref);
   return toScanResult(ref, booking);
 }
