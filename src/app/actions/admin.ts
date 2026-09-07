@@ -34,6 +34,7 @@ import {
   updateMovie,
   updateScreenLayout,
   updateShowtime,
+  upsertCustomer,
 } from "@/lib/data";
 import { layoutMaxSeatNumber, REAL_SCREENS } from "@/lib/real-screens";
 import { parseVenueDateTime } from "@/lib/timezone";
@@ -401,6 +402,7 @@ export async function createAdminBookingAction(
 
   const showtimeId = String(formData.get("showtimeId") || "");
   const customerName = String(formData.get("customerName") || "").trim();
+  const customerPhone = String(formData.get("customerPhone") || "").trim();
   const ticketCount = Number(formData.get("ticketCount") || 0);
   const unitPrice = Number(formData.get("unitPrice") || 0); // dollars
   const paymentTerms = String(formData.get("paymentTerms") || "cash") as
@@ -413,6 +415,7 @@ export async function createAdminBookingAction(
   const manualSeatIds = formData.getAll("seatIds").map(String);
 
   if (!showtimeId) return { error: "Please choose a showtime." };
+  if (!customerPhone) return { error: "Phone number is required." };
   if (!customerName) return { error: "Customer name is required." };
   if (!Number.isFinite(ticketCount) || ticketCount < 1) {
     return { error: "Number of tickets must be at least 1." };
@@ -423,6 +426,11 @@ export async function createAdminBookingAction(
   if (paymentTerms === "deposit" && !depositReference) {
     return { error: "Deposit reference is required when payment terms is Deposit." };
   }
+
+  // Records/updates this phone number in the master customer directory
+  // before the booking itself is created, so every walk-in sale — not just
+  // new ones — keeps that directory current for next time.
+  const customer = await upsertCustomer({ phone: customerPhone, name: customerName });
 
   const unitPriceCents = Math.round(unitPrice * 100);
   const totalCents = unitPriceCents * ticketCount;
@@ -454,6 +462,7 @@ export async function createAdminBookingAction(
       showtimeId,
       seatIds,
       customerName,
+      customerId: customer.id,
       unitPriceCents,
       totalCents,
       paymentTerms,
@@ -555,6 +564,8 @@ export async function editBookingDetailsAction(
     | "cash_due";
   const depositReference = String(formData.get("depositReference") || "").trim();
   const depositDate = String(formData.get("depositDate") || "").trim();
+  const customerName = String(formData.get("customerName") || "").trim();
+  const customerPhone = String(formData.get("customerPhone") || "").trim();
 
   if (!bookingId) return { error: "Missing booking id." };
   if (seatIds.length === 0) return { error: "Please select at least one seat." };
@@ -564,18 +575,35 @@ export async function editBookingDetailsAction(
   if (paymentTerms === "deposit" && !depositReference) {
     return { error: "Deposit reference is required when payment terms is Deposit." };
   }
+  if (customerPhone && !customerName) {
+    return { error: "Customer name is required when a phone number is given." };
+  }
 
   const unitPriceCents = Math.round(unitPrice * 100);
   const totalCents = unitPriceCents * seatIds.length;
 
+  // Only touches customer_name/customer_id when a phone number was actually
+  // given on this save (the form ships blank for bookings that predate this
+  // field) — otherwise leaves whatever's already on the booking alone.
+  let customerUpdate: { customerName: string; customerId: string | null } | undefined;
+  if (customerPhone && customerName) {
+    const customer = await upsertCustomer({ phone: customerPhone, name: customerName });
+    customerUpdate = { customerName, customerId: customer.id };
+  }
+
   try {
-    await updateBookingSeats(bookingId, seatIds, {
-      unitPriceCents,
-      totalCents,
-      paymentTerms,
-      depositReference: paymentTerms === "deposit" ? depositReference : null,
-      depositDate: paymentTerms === "deposit" ? depositDate || null : null,
-    });
+    await updateBookingSeats(
+      bookingId,
+      seatIds,
+      {
+        unitPriceCents,
+        totalCents,
+        paymentTerms,
+        depositReference: paymentTerms === "deposit" ? depositReference : null,
+        depositDate: paymentTerms === "deposit" ? depositDate || null : null,
+      },
+      customerUpdate
+    );
   } catch (err) {
     if (err instanceof Error && err.message === "SEATS_UNAVAILABLE") {
       return { error: "One or more selected seats are already taken. Please pick again." };
