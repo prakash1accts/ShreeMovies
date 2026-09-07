@@ -151,11 +151,17 @@ export default async function AdminBookingsPage({
                 </td>
                 <td className="px-4 py-3">AOA {(b.total_cents / 100).toFixed(2)}</td>
                 <td className="px-4 py-3 text-neutral-400">
-                  {b.payment_terms
-                    ? b.payment_terms === "deposit"
-                      ? `Deposit${b.deposit_reference ? ` (${b.deposit_reference})` : ""}`
-                      : "Cash"
-                    : "—"}
+                  {b.payment_terms === "cash_due" ? (
+                    <span className="rounded-full bg-amber-950 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                      Cash Due
+                    </span>
+                  ) : b.payment_terms === "deposit" ? (
+                    `Deposit${b.deposit_reference ? ` (${b.deposit_reference})` : ""}`
+                  ) : b.payment_terms === "cash" ? (
+                    "Cash"
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <span
