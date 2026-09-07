@@ -7,6 +7,7 @@ import {
   autoAllocateSeats,
   blockSeats,
   cancelBooking,
+  claimPromoCode,
   closeShowtime,
   createAdminBooking,
   createMovie,
@@ -17,12 +18,14 @@ import {
   deleteScreen,
   deleteShowtime,
   getBookingByReference,
+  getRedeemablePromoCode,
   linkBookingToUser,
   listScreens,
   listTheaters,
   markBookingCheckedIn,
   markBookingPaid,
   markCashCollected,
+  releasePromoCode,
   reopenShowtime,
   resetCheckInsForShowtime,
   resyncShowtimeSeats,
@@ -36,6 +39,7 @@ import {
   updateShowtime,
   upsertCustomer,
 } from "@/lib/data";
+import type { PromoCode } from "@/lib/types";
 import { layoutMaxSeatNumber, REAL_SCREENS } from "@/lib/real-screens";
 import { parseVenueDateTime } from "@/lib/timezone";
 
@@ -433,7 +437,23 @@ export async function createAdminBookingAction(
   const customer = await upsertCustomer({ phone: customerPhone, name: customerName });
 
   const unitPriceCents = Math.round(unitPrice * 100);
-  const totalCents = unitPriceCents * ticketCount;
+  const rawTotalCents = unitPriceCents * ticketCount;
+
+  // A promo code is optional here too — only checked (and only ever
+  // locks/burns the code) when the admin actually typed one in.
+  const promoCodeInput = String(formData.get("promoCode") || "").trim();
+  let promo: PromoCode | undefined;
+  let discountCents = 0;
+  if (promoCodeInput) {
+    promo = await getRedeemablePromoCode(promoCodeInput, showtimeId);
+    if (!promo) {
+      return {
+        error: "That promo code isn't valid for this showtime, or has already been used.",
+      };
+    }
+    discountCents = Math.round((rawTotalCents * promo.discount_percent) / 100);
+  }
+  const totalCents = rawTotalCents - discountCents;
 
   let seatIds: string[];
   if (autoAllocate) {
@@ -457,6 +477,15 @@ export async function createAdminBookingAction(
     seatIds = manualSeatIds;
   }
 
+  let claimedPromoId: string | null = null;
+  if (promo) {
+    const claimed = await claimPromoCode(promo.id);
+    if (!claimed) {
+      return { error: "That promo code was just used by someone else. Please try again." };
+    }
+    claimedPromoId = claimed.id;
+  }
+
   try {
     await createAdminBooking({
       showtimeId,
@@ -468,8 +497,11 @@ export async function createAdminBookingAction(
       paymentTerms,
       depositReference: paymentTerms === "deposit" ? depositReference : undefined,
       depositDate: paymentTerms === "deposit" ? depositDate : undefined,
+      promoCode: promo?.code ?? null,
+      discountCents,
     });
   } catch (err) {
+    if (claimedPromoId) await releasePromoCode(claimedPromoId);
     if (err instanceof Error && err.message === "SEATS_UNAVAILABLE") {
       return {
         error: "One or more selected seats were just booked by someone else. Please pick again.",
