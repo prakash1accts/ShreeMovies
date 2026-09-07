@@ -21,7 +21,7 @@ export default function AdminBookingForm({
     showtimes[0] ? (showtimes[0].price_cents / 100).toFixed(2) : ""
   );
   const [autoAllocate, setAutoAllocate] = useState<"yes" | "no">("yes");
-  const [paymentTerms, setPaymentTerms] = useState<"cash" | "deposit">("cash");
+  const [paymentTerms, setPaymentTerms] = useState<"cash" | "deposit" | "cash_due">("cash");
   const [selectedSeats, setSelectedSeats] = useState<Set<string>>(new Set());
 
   const seats = useMemo(
@@ -141,12 +141,19 @@ export default function AdminBookingForm({
           <select
             name="paymentTerms"
             value={paymentTerms}
-            onChange={(e) => setPaymentTerms(e.target.value as "cash" | "deposit")}
+            onChange={(e) => setPaymentTerms(e.target.value as "cash" | "deposit" | "cash_due")}
             className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
           >
             <option value="cash">Cash</option>
             <option value="deposit">Deposit</option>
+            <option value="cash_due">Cash Due (pay at the door)</option>
           </select>
+          {paymentTerms === "cash_due" && (
+            <p className="mt-1 text-xs text-amber-400">
+              Seats are locked in now, but gate staff will get a CASH DUE reminder — with the
+              amount owed — the moment this ticket is scanned at the door.
+            </p>
+          )}
         </div>
 
         {paymentTerms === "deposit" && (
