@@ -94,6 +94,7 @@ export interface Booking {
   total_cents: number;
   stripe_session_id: string | null;
   customer_name: string | null;
+  customer_id: string | null;
   unit_price_cents: number | null;
   payment_terms: PaymentTerms | null;
   deposit_reference: string | null;
@@ -105,6 +106,20 @@ export interface Booking {
   created_by_admin: boolean;
   checked_in_at: string | null;
   created_at: string;
+}
+
+// Master phone -> name directory. Deliberately separate from `User` (which
+// is an online login account with a password): a customer doesn't need to
+// create an account to have their name on file here. Looked up by phone
+// number so a name only ever has to be typed once, whether they first show
+// up as an admin-entered walk-in sale or a self-service online signup.
+export interface Customer {
+  id: string;
+  phone: string;
+  name: string;
+  whatsapp: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface SessionUser {
