@@ -90,6 +90,8 @@ export default async function VerifyTicketPage({
                 <div className="font-medium">
                   {booking.payment_terms === "deposit"
                     ? "Deposit"
+                    : booking.payment_terms === "cash_due"
+                    ? "Cash Due"
                     : booking.payment_terms === "cash"
                     ? "Cash"
                     : "Online"}
@@ -97,8 +99,14 @@ export default async function VerifyTicketPage({
               </div>
             </div>
 
+            {booking.payment_terms === "cash_due" && (
+              <div className="mt-4 rounded-md border-2 border-amber-600 bg-amber-950/40 p-3 text-center text-sm font-semibold text-amber-200">
+                💵 CASH DUE — collect AOA {(booking.total_cents / 100).toFixed(2)} before admitting
+              </div>
+            )}
+
             {booking.seats_changed_note && (
-              <div className="mt-4 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-xs text-amber-300">
+              <div className="mt-4 rounded-md border-2 border-amber-600 bg-amber-950/40 p-3 text-xs text-amber-200">
                 ⚠ {booking.seats_changed_note}
               </div>
             )}
