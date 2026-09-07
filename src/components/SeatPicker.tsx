@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useActionState } from "react";
 import { bookSeatsAction } from "@/app/actions/booking";
+import { previewPromoCodeAction } from "@/app/actions/promotions";
 import type { Seat } from "@/lib/types";
 
 export default function SeatPicker({
@@ -22,6 +23,33 @@ export default function SeatPicker({
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [state, formAction, isPending] = useActionState(bookSeatsAction, undefined);
+
+  const [promoCode, setPromoCode] = useState("");
+  const [promoDiscount, setPromoDiscount] = useState<number | null>(null);
+  const [promoStatus, setPromoStatus] = useState<"idle" | "checking" | "valid" | "invalid">(
+    "idle"
+  );
+
+  // Checked on blur, same pattern as the phone-lookup elsewhere — never
+  // marks the code used itself (see previewPromoCodeAction), just shows
+  // whether it's redeemable for this showtime before the customer commits.
+  async function handlePromoBlur() {
+    const code = promoCode.trim();
+    if (!code) {
+      setPromoStatus("idle");
+      setPromoDiscount(null);
+      return;
+    }
+    setPromoStatus("checking");
+    const result = await previewPromoCodeAction(code, showtimeId);
+    if (result) {
+      setPromoDiscount(result.discountPercent);
+      setPromoStatus("valid");
+    } else {
+      setPromoDiscount(null);
+      setPromoStatus("invalid");
+    }
+  }
 
   const rows = useMemo(() => {
     const map = new Map<string, Seat[]>();
@@ -55,7 +83,10 @@ export default function SeatPicker({
     });
   }
 
-  const total = selected.size * priceCents;
+  const rawTotal = selected.size * priceCents;
+  const discountAmount =
+    promoStatus === "valid" && promoDiscount ? Math.round((rawTotal * promoDiscount) / 100) : 0;
+  const total = rawTotal - discountAmount;
 
   return (
     <div>
@@ -149,11 +180,44 @@ export default function SeatPicker({
           <input key={seatId} type="hidden" name="seatIds" value={seatId} />
         ))}
 
+        <div className="mb-3">
+          <label className="mb-1 block text-sm text-neutral-300">Promo code (optional)</label>
+          <input
+            name="promoCode"
+            value={promoCode}
+            onChange={(e) => {
+              setPromoCode(e.target.value);
+              setPromoStatus("idle");
+              setPromoDiscount(null);
+            }}
+            onBlur={handlePromoBlur}
+            placeholder="e.g. YASIN-7970"
+            className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500"
+          />
+          {promoStatus === "checking" && (
+            <p className="mt-1 text-xs text-neutral-500">Checking…</p>
+          )}
+          {promoStatus === "valid" && (
+            <p className="mt-1 text-xs text-green-400">✓ {promoDiscount}% off applied.</p>
+          )}
+          {promoStatus === "invalid" && (
+            <p className="mt-1 text-xs text-red-400">
+              That code isn&apos;t valid for this showtime, or has already been used.
+            </p>
+          )}
+        </div>
+
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
           <div className="flex justify-between text-sm text-neutral-400">
             <span>Seats selected</span>
             <span>{selected.size}</span>
           </div>
+          {discountAmount > 0 && (
+            <div className="mt-1 flex justify-between text-sm text-green-400">
+              <span>Discount ({promoDiscount}%)</span>
+              <span>-AOA {(discountAmount / 100).toFixed(2)}</span>
+            </div>
+          )}
           <div className="mt-1 flex justify-between text-lg font-semibold">
             <span>Total</span>
             <span>AOA {(total / 100).toFixed(2)}</span>
