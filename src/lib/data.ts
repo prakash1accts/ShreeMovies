@@ -111,6 +111,16 @@ export async function getCustomerById(id: string): Promise<Customer | undefined>
   return rows[0];
 }
 
+// The full master directory, for the admin "Customers" list — newest-added
+// first, so a name just captured at the box office or at signup shows up
+// right away.
+export async function listAllCustomers(): Promise<Customer[]> {
+  const { rows } = await query<Customer>(
+    "SELECT * FROM customers ORDER BY updated_at DESC"
+  );
+  return rows;
+}
+
 // Creates the master record the first time a phone number is seen, or
 // updates the name/WhatsApp on file when that same number is used again —
 // so the directory always reflects the most recently given name for a
