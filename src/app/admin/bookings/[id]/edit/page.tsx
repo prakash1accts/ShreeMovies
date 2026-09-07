@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   getBooking,
   getBookingSeatIds,
+  getCustomerById,
   getShowtime,
   listCustomers,
   listSeatsForShowtime,
@@ -27,10 +28,11 @@ export default async function EditBookingPage({
   // Only needed to populate the "link to a customer account" picker, and
   // only ever shown for bookings that don't have one yet — but cheap enough
   // to just always fetch rather than branching the query.
-  const [seats, currentSeatIds, customers] = await Promise.all([
+  const [seats, currentSeatIds, customers, linkedCustomer] = await Promise.all([
     listSeatsForShowtime(booking.showtime_id),
     getBookingSeatIds(booking.id),
     listCustomers(),
+    booking.customer_id ? getCustomerById(booking.customer_id) : Promise.resolve(undefined),
   ]);
 
   // deposit_date is a Postgres DATE column — pg returns those as a Date
@@ -61,6 +63,7 @@ export default async function EditBookingPage({
           seats={seats}
           currentSeatIds={currentSeatIds}
           initialDepositDate={initialDepositDate}
+          initialCustomerPhone={linkedCustomer?.phone ?? ""}
         />
         {!booking.user_id && <LinkToAccount booking={booking} customers={customers} />}
       </div>
