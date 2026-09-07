@@ -8,7 +8,7 @@ import {
   setSessionCookie,
   verifyPassword,
 } from "@/lib/auth";
-import { createUser, getUserByEmail, hasAnyAdmin } from "@/lib/data";
+import { createUser, getUserByEmail, hasAnyAdmin, upsertCustomer } from "@/lib/data";
 
 export async function signupAction(
   _prevState: { error?: string } | undefined,
@@ -32,6 +32,12 @@ export async function signupAction(
 
   const passwordHash = await hashPassword(password);
   const user = await createUser({ name, email, passwordHash, phone, whatsapp });
+
+  // Keeps the master phone -> name directory current for online signups
+  // too, not just admin walk-in sales, so a future box-office visit under
+  // this same number (or vice versa) can autofill the name either way.
+  await upsertCustomer({ phone, name, whatsapp });
+
   await setSessionCookie({
     id: user.id,
     name: user.name,
