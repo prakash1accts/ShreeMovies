@@ -41,6 +41,9 @@ export async function bookSeatsAction(
   if (!showtime) {
     return { error: "This showtime no longer exists." };
   }
+  if (showtime.closed_at) {
+    return { error: "This showtime is closed and no longer accepting bookings." };
+  }
 
   const seats = await getSeatsByIds(seatIds);
   if (seats.some((s) => s.status !== "available")) {
