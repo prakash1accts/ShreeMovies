@@ -95,6 +95,22 @@ CREATE TABLE IF NOT EXISTS customers (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Single-use discount codes, e.g. for a WhatsApp campaign offering past
+-- customers of one movie a percentage off an upcoming show. customer_id
+-- and/or showtime_id, when set, lock a code to one specific customer and/or
+-- one specific showtime, and used_at (set the moment it's redeemed) makes
+-- every code one-time-only — together these keep a forwarded/leaked code
+-- from being usable outside its intended audience.
+CREATE TABLE IF NOT EXISTS promo_codes (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  discount_percent INTEGER NOT NULL,
+  customer_id TEXT REFERENCES customers(id),
+  showtime_id TEXT REFERENCES showtimes(id) ON DELETE CASCADE,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS bookings (
   id TEXT PRIMARY KEY,
   user_id TEXT REFERENCES users(id) ON DELETE CASCADE, -- null for admin-entered walk-in/phone bookings with no online account
@@ -114,6 +130,8 @@ CREATE TABLE IF NOT EXISTS bookings (
   cancel_reason TEXT, -- set when a booking is cancelled automatically (e.g. seat hold expired before payment), so the customer sees why on "My Bookings" instead of just "cancelled"
   created_by_admin BOOLEAN NOT NULL DEFAULT false,
   checked_in_at TIMESTAMPTZ, -- set when staff tap "Admit" on the ticket-verification screen (QR scan at the door); null means not yet admitted
+  promo_code TEXT, -- the code redeemed for this booking, if any (kept as text even if the promo_codes row is later deleted)
+  discount_cents INTEGER NOT NULL DEFAULT 0, -- amount knocked off by promo_code; total_cents already reflects it
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE bookings ALTER COLUMN user_id DROP NOT NULL;
@@ -129,6 +147,8 @@ ALTER TABLE bookings ADD COLUMN IF NOT EXISTS seats_changed_note TEXT;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS created_by_admin BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS promo_code TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_cents INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS booking_seats (
   booking_id TEXT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
@@ -163,4 +183,5 @@ CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings(user_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_showtime ON bookings(showtime_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_customer ON bookings(customer_id);
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+CREATE INDEX IF NOT EXISTS idx_promo_codes_code ON promo_codes(code);
 CREATE INDEX IF NOT EXISTS idx_movie_votes_movie ON movie_votes(movie_id);
