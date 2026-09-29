@@ -50,6 +50,10 @@ export interface Movie {
   rating: string | null;
   language: string | null;
   created_at: string;
+  // Set when an admin archives this movie — hidden from every customer-facing
+  // screen, but its showtimes/seats/bookings are untouched. See archiveMovie()
+  // / unarchiveMovie() in data.ts.
+  archived_at: string | null;
 }
 
 export interface Showtime {
@@ -63,6 +67,10 @@ export interface Showtime {
   // null means still active/open. See closeShowtime()/reopenShowtime() in
   // data.ts for what closing does and doesn't touch.
   closed_at: string | null;
+  // When true, only an admin can book this showtime — every other visitor
+  // sees a contact message instead of the seat picker. See
+  // BOOKING_CONTACT_PHONE in lib/payment-info.ts for the number shown.
+  admin_only_booking: boolean;
 }
 
 // "blocked" is an admin-only state — a seat taken out of sale (broken seat,
