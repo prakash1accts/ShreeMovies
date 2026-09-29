@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getMovie, listShowtimesForMovie } from "@/lib/data";
+import { getSession } from "@/lib/auth";
 import PosterImage from "@/components/PosterImage";
 import { formatVenueDate, formatVenueTime } from "@/lib/timezone";
 
@@ -11,7 +12,11 @@ export default async function MovieDetailPage({
 }) {
   const { id } = await params;
   const movie = await getMovie(id);
-  if (!movie) notFound();
+  const session = await getSession();
+  const isAdmin = session?.role === "admin";
+  // Archived movies are hidden from customers, same as if they didn't exist
+  // — but an admin can still open the page directly (e.g. to unarchive it).
+  if (!movie || (movie.archived_at && !isAdmin)) notFound();
 
   const showtimes = await listShowtimesForMovie(id);
 
@@ -102,12 +107,21 @@ export default async function MovieDetailPage({
                         })}
                         <span className="ml-2 text-neutral-500">{st.screen_name}</span>
                       </span>
-                      <Link
-                        href={`/showtimes/${st.id}`}
-                        className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
-                      >
-                        Book ticket
-                      </Link>
+                      {st.admin_only_booking && !isAdmin ? (
+                        <Link
+                          href={`/showtimes/${st.id}`}
+                          className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-semibold text-neutral-300 transition hover:border-neutral-500"
+                        >
+                          Contact to book
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/showtimes/${st.id}`}
+                          className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
+                        >
+                          Book ticket
+                        </Link>
+                      )}
                     </div>
                   ))}
                 </div>
