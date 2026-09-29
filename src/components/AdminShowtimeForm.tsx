@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { createShowtimeAction, updateShowtimeAction } from "@/app/actions/admin";
 import type { Movie, Screen, Showtime } from "@/lib/types";
 import { splitVenueDateTime } from "@/lib/timezone";
+import { BOOKING_CONTACT_PHONE } from "@/lib/payment-info";
 
 export default function AdminShowtimeForm({
   movies,
@@ -118,6 +119,24 @@ export default function AdminShowtimeForm({
           — raise it for high-demand showtimes so customers have more time to complete a bank
           transfer.
         </p>
+      </div>
+      <div className="sm:col-span-2">
+        <label className="flex items-start gap-2 text-sm text-neutral-300">
+          <input
+            type="checkbox"
+            name="adminOnlyBooking"
+            defaultChecked={showtime?.admin_only_booking ?? false}
+            className="mt-0.5 h-4 w-4 rounded border-neutral-700 bg-neutral-950 accent-red-600"
+          />
+          <span>
+            Admin-only booking for this session
+            <span className="mt-0.5 block text-xs text-neutral-500">
+              Only an admin can book seats for this showtime. Everyone else sees a message
+              telling them to contact Shree Movies booking ({BOOKING_CONTACT_PHONE}) instead of
+              the seat picker.
+            </span>
+          </span>
+        </label>
       </div>
 
       {state?.error && (
