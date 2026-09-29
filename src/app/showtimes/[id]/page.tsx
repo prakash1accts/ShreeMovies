@@ -3,6 +3,7 @@ import { getShowtime, listSeatsForShowtime } from "@/lib/data";
 import { getSession } from "@/lib/auth";
 import SeatPicker from "@/components/SeatPicker";
 import { formatVenueDateTime } from "@/lib/timezone";
+import { BOOKING_CONTACT_PHONE } from "@/lib/payment-info";
 
 export default async function ShowtimePage({
   params,
@@ -38,6 +39,21 @@ export default async function ShowtimePage({
       {showtime.closed_at ? (
         <div className="mx-auto max-w-md rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-center text-neutral-400">
           This showtime is closed and no longer accepting bookings.
+        </div>
+      ) : showtime.admin_only_booking && session?.role !== "admin" ? (
+        <div className="mx-auto max-w-md rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-center text-neutral-300">
+          <p>Online booking isn&apos;t available for this session.</p>
+          <p className="mt-2">
+            Contact Shree Movies booking for this session:{" "}
+            <a
+              href={`https://wa.me/${BOOKING_CONTACT_PHONE.replace(/[^0-9]/g, "")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-red-400 hover:text-red-300"
+            >
+              {BOOKING_CONTACT_PHONE}
+            </a>
+          </p>
         </div>
       ) : (
         <SeatPicker
