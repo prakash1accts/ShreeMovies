@@ -16,6 +16,7 @@ import {
 import type { PromoCode } from "@/lib/types";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { formatVenueDateTime } from "@/lib/timezone";
+import { BOOKING_CONTACT_PHONE } from "@/lib/payment-info";
 
 export async function bookSeatsAction(
   _prevState: { error?: string } | undefined,
@@ -47,6 +48,14 @@ export async function bookSeatsAction(
   }
   if (showtime.closed_at) {
     return { error: "This showtime is closed and no longer accepting bookings." };
+  }
+  // Defense in depth: the showtime page already hides the seat picker for
+  // this case, but a direct form submission should still be refused server
+  // side rather than trusted.
+  if (showtime.admin_only_booking && session.role !== "admin") {
+    return {
+      error: `Online booking isn't available for this session. Contact Shree Movies booking for this session: ${BOOKING_CONTACT_PHONE}`,
+    };
   }
 
   const seats = await getSeatsByIds(seatIds);
