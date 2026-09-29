@@ -2,9 +2,9 @@ import Link from "next/link";
 import {
   getVoteCountsForMovies,
   getVoterVotes,
-  listMovies,
   listMoviesByLanguage,
   listUpcomingShowtimes,
+  listVisibleMovies,
 } from "@/lib/data";
 import { getVoterKey } from "@/lib/voter";
 import { voteMovieAction } from "@/app/actions/votes";
@@ -14,7 +14,7 @@ import type { Movie, MovieVoteCounts, VoteValue } from "@/lib/types";
 
 export default async function HomePage() {
   const [movies, hindiMovies, tamilMovies, upcomingShowtimes] = await Promise.all([
-    listMovies(),
+    listVisibleMovies(),
     listMoviesByLanguage("Hindi", 5),
     listMoviesByLanguage("Tamil", 5),
     listUpcomingShowtimes(),
