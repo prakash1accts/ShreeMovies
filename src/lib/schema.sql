@@ -43,9 +43,16 @@ CREATE TABLE IF NOT EXISTS movies (
   genre TEXT,
   rating TEXT, -- e.g. PG-13
   language TEXT, -- e.g. "Hindi", "Tamil", "Telugu", "English" — used for the homepage poster carousel
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Set when an admin retires this movie from every customer-facing screen
+  -- (homepage "Now Showing"/"Coming Soon" grids, the language poster
+  -- marquee, and its own /movies/[id] page) without touching its showtimes,
+  -- seats, or bookings — unlike deleting the movie, which cascades and
+  -- destroys all of that history. Null means still visible. Reversible.
+  archived_at TIMESTAMPTZ
 );
 ALTER TABLE movies ADD COLUMN IF NOT EXISTS language TEXT;
+ALTER TABLE movies ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS showtimes (
   id TEXT PRIMARY KEY,
@@ -64,10 +71,17 @@ CREATE TABLE IF NOT EXISTS showtimes (
   -- touching a single booking/seat/ticket row, so its booking references
   -- and ticket counts stay fully intact for Reports lookups later. Null
   -- means still active/open. Reversible (an admin can reopen it).
-  closed_at TIMESTAMPTZ
+  closed_at TIMESTAMPTZ,
+  -- When true, only an admin (logged in with role 'admin') can complete a
+  -- booking for this specific showtime — every other visitor sees a contact
+  -- message with the booking phone number instead of the seat picker. Set
+  -- per-showtime (not global), e.g. for a session being sold by phone/walk-in
+  -- only. Reversible from the same Edit showtime form.
+  admin_only_booking BOOLEAN NOT NULL DEFAULT false
 );
 ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS hold_minutes INTEGER NOT NULL DEFAULT 15;
 ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS admin_only_booking BOOLEAN NOT NULL DEFAULT false;
 
 -- One row per seat per showtime, created at showtime-creation time
 CREATE TABLE IF NOT EXISTS seats (
