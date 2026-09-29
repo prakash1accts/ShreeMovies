@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { hashPassword, requireAdmin } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import {
+  archiveMovie,
   autoAllocateSeats,
   blockSeats,
   cancelBooking,
@@ -32,6 +33,7 @@ import {
   restoreBooking,
   setUserBlocked,
   setUserPassword,
+  unarchiveMovie,
   unblockSeats,
   updateBookingSeats,
   updateMovie,
@@ -111,7 +113,37 @@ export async function updateMovieAction(
 export async function deleteMovieAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") || "");
-  if (id) await deleteMovie(id);
+  if (id) {
+    try {
+      await deleteMovie(id);
+    } catch (err) {
+      if (err instanceof Error && err.message === "MOVIE_HAS_BOOKINGS") {
+        // Refuse the destructive delete — send the admin back with an
+        // explanation and point them at the safe alternative instead.
+        redirect("/admin/movies?deleteError=" + id);
+      }
+      throw err;
+    }
+  }
+  revalidatePath("/admin/movies");
+  revalidatePath("/");
+}
+
+// Hides a movie from customers (homepage, marquee, its own page) while
+// keeping all of its showtimes/seats/bookings intact — the safe way to
+// retire a movie that has real booking history, instead of deleting it.
+export async function archiveMovieAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  if (id) await archiveMovie(id);
+  revalidatePath("/admin/movies");
+  revalidatePath("/");
+}
+
+export async function unarchiveMovieAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  if (id) await unarchiveMovie(id);
   revalidatePath("/admin/movies");
   revalidatePath("/");
 }
@@ -234,6 +266,7 @@ export async function createShowtimeAction(
   const holdMinutesRaw = Number(formData.get("holdMinutes"));
   const holdMinutes =
     Number.isFinite(holdMinutesRaw) && holdMinutesRaw > 0 ? Math.round(holdMinutesRaw) : 15;
+  const adminOnlyBooking = formData.get("adminOnlyBooking") === "on";
 
   if (!movieId || !screenId || !date || !time) {
     return { error: "Please fill in all fields." };
@@ -250,6 +283,7 @@ export async function createShowtimeAction(
     startsAt: startsAt.toISOString(),
     priceCents: Math.round(price * 100),
     holdMinutes,
+    adminOnlyBooking,
   });
 
   revalidatePath("/admin/showtimes");
@@ -272,6 +306,7 @@ export async function updateShowtimeAction(
   const holdMinutesRaw = Number(formData.get("holdMinutes"));
   const holdMinutes =
     Number.isFinite(holdMinutesRaw) && holdMinutesRaw > 0 ? Math.round(holdMinutesRaw) : 15;
+  const adminOnlyBooking = formData.get("adminOnlyBooking") === "on";
 
   if (!id) return { error: "Missing showtime id." };
   if (!movieId || !screenId || !date || !time) {
@@ -290,6 +325,7 @@ export async function updateShowtimeAction(
     startsAt: startsAt.toISOString(),
     priceCents: Math.round(price * 100),
     holdMinutes,
+    adminOnlyBooking,
   });
 
   if (result.error) return { error: result.error };
