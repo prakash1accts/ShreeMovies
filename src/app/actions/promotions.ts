@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { createPromoCode, getRedeemablePromoCode } from "@/lib/data";
 
@@ -46,5 +47,9 @@ export async function createPromoCodeAction(
     return { error: "Could not create the code. Please try again." };
   }
 
+  // Without this, the success message above shows immediately (it's the
+  // action's own return value) but the codes table below it stays on its
+  // stale, pre-creation render until the admin manually reloads the page.
+  revalidatePath("/admin/promotions");
   return { success: `Code "${code.toUpperCase()}" created.` };
 }
