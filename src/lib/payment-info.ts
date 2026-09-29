@@ -12,6 +12,12 @@ export const BANK_ACCOUNT = {
   email: "shree.movies@gmail.com",
 };
 
+// Shown to customers instead of the seat picker on a showtime an admin has
+// marked "admin-only booking" — e.g. a session being sold by phone or
+// walk-in only. Deliberately separate from BANK_ACCOUNT.whatsapp above,
+// which is the general payment-confirmation channel.
+export const BOOKING_CONTACT_PHONE = "+244 923 430 255";
+
 // Currency shown throughout the site — Angolan Kwanza.
 export const CURRENCY_CODE = "AOA";
 
