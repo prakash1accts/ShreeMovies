@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listActiveBookings, listMovies } from "@/lib/data";
+import { listActiveBookings, listActiveShowtimes } from "@/lib/data";
 import {
   confirmBookingPaymentAction,
   cancelBookingAction,
@@ -12,18 +12,26 @@ import { formatVenueDateTime } from "@/lib/timezone";
 export default async function AdminBookingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ restoreError?: string; movieId?: string }>;
+  searchParams: Promise<{ restoreError?: string; movieId?: string; showtimeId?: string }>;
 }) {
-  const { restoreError, movieId } = await searchParams;
-  const [bookings, movies] = await Promise.all([listActiveBookings(movieId), listMovies()]);
+  const { restoreError, movieId, showtimeId } = await searchParams;
+  const [bookings, showtimes] = await Promise.all([
+    listActiveBookings({ movieId, showtimeId }),
+    listActiveShowtimes(),
+  ]);
   const pending = bookings.filter((b) => b.status === "pending");
+  const filtered = Boolean(movieId || showtimeId);
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Bookings</h1>
         <div className="flex flex-wrap items-center gap-3">
-          <BookingsMovieFilter movies={movies} selectedMovieId={movieId} />
+          <BookingsMovieFilter
+            showtimes={showtimes}
+            selectedMovieId={movieId}
+            selectedShowtimeId={showtimeId}
+          />
           <Link
             href="/admin/bookings/new"
             className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500"
@@ -233,7 +241,7 @@ export default async function AdminBookingsPage({
         </table>
         {bookings.length === 0 && (
           <div className="p-6 text-center text-neutral-400">
-            {movieId ? "No bookings for this movie." : "No bookings yet."}
+            {filtered ? "No bookings match this filter." : "No bookings yet."}
           </div>
         )}
       </div>
