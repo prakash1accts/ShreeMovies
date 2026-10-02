@@ -16,22 +16,14 @@ import type {
 } from "./types";
 
 // ---------- Users ----------
-// `movieId` optionally narrows the list to one movie — used by the Bookings
-// admin page's movie filter so a title with hundreds of bookings doesn't
-// bury everything else in the list.
-export async function listActiveBookings(movieId?: string): Promise<BookingWithDetails[]> {
-  if (movieId) {
-    const { rows } = await query<BookingWithDetails>(
-      `${BOOKING_DETAILS_SELECT} WHERE st.closed_at IS NULL AND m.id = $1 ORDER BY b.created_at DESC`,
-      [movieId]
-    );
-    return rows;
-  }
-  const { rows } = await query<BookingWithDetails>(
-    `${BOOKING_DETAILS_SELECT} WHERE st.closed_at IS NULL ORDER BY b.created_at DESC`
-  );
-  return rows;
+
+export async function getUserByEmail(email: string): Promise<User | undefined> {
+  const { rows } = await query<User>("SELECT * FROM users WHERE email = $1", [
+    email.toLowerCase().trim(),
+  ]);
+  return rows[0];
 }
+
 export async function getUserById(id: string): Promise<User | undefined> {
   const { rows } = await query<User>("SELECT * FROM users WHERE id = $1", [id]);
   return rows[0];
@@ -1626,7 +1618,18 @@ export async function listAllBookings(): Promise<BookingWithDetails[]> {
 // stays available via listAllBookings, which only Reports uses, so revenue
 // and ticket counts are never lost, just no longer cluttering the working
 // list.
-export async function listActiveBookings(): Promise<BookingWithDetails[]> {
+//
+// `movieId` optionally narrows the list to one movie — used by the Bookings
+// admin page's movie filter so a title with hundreds of bookings doesn't
+// bury everything else in the list.
+export async function listActiveBookings(movieId?: string): Promise<BookingWithDetails[]> {
+  if (movieId) {
+    const { rows } = await query<BookingWithDetails>(
+      `${BOOKING_DETAILS_SELECT} WHERE st.closed_at IS NULL AND m.id = $1 ORDER BY b.created_at DESC`,
+      [movieId]
+    );
+    return rows;
+  }
   const { rows } = await query<BookingWithDetails>(
     `${BOOKING_DETAILS_SELECT} WHERE st.closed_at IS NULL ORDER BY b.created_at DESC`
   );
