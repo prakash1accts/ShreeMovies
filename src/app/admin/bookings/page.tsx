@@ -1,32 +1,36 @@
 import Link from "next/link";
-import { listActiveBookings } from "@/lib/data";
+import { listActiveBookings, listMovies } from "@/lib/data";
 import {
   confirmBookingPaymentAction,
   cancelBookingAction,
   restoreBookingAction,
 } from "@/app/actions/admin";
 import TicketButton from "@/components/TicketButton";
+import BookingsMovieFilter from "@/components/BookingsMovieFilter";
 import { formatVenueDateTime } from "@/lib/timezone";
 
 export default async function AdminBookingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ restoreError?: string }>;
+  searchParams: Promise<{ restoreError?: string; movieId?: string }>;
 }) {
-  const { restoreError } = await searchParams;
-  const bookings = await listActiveBookings();
+  const { restoreError, movieId } = await searchParams;
+  const [bookings, movies] = await Promise.all([listActiveBookings(movieId), listMovies()]);
   const pending = bookings.filter((b) => b.status === "pending");
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Bookings</h1>
-        <Link
-          href="/admin/bookings/new"
-          className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500"
-        >
-          + New Booking
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <BookingsMovieFilter movies={movies} selectedMovieId={movieId} />
+          <Link
+            href="/admin/bookings/new"
+            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500"
+          >
+            + New Booking
+          </Link>
+        </div>
       </div>
 
       {restoreError && (
@@ -228,7 +232,9 @@ export default async function AdminBookingsPage({
           </tbody>
         </table>
         {bookings.length === 0 && (
-          <div className="p-6 text-center text-neutral-400">No bookings yet.</div>
+          <div className="p-6 text-center text-neutral-400">
+            {movieId ? "No bookings for this movie." : "No bookings yet."}
+          </div>
         )}
       </div>
     </div>
