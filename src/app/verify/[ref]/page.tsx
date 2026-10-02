@@ -26,11 +26,26 @@ export default async function VerifyTicketPage({
   const booking = await getBookingByReference(ref);
   const showtime = booking ? await getShowtime(booking.showtime_id) : undefined;
 
+  // A "Cash Due" walk-in booking is stored as status 'paid' the moment it's
+  // created (see createAdminBooking) even though no cash has actually
+  // changed hands yet — the amber "collect AOA X before admitting" box below
+  // is the only thing that used to flag that. That left the big banner at
+  // the top saying "VALID — PAID" (green) for a booking that is, in plain
+  // terms, not paid — easy to misread at a glance while scanning tickets at
+  // the door. This treats cash_due as its own case so the banner itself
+  // says "NOT PAID" in red, matching reality, instead of only relying on the
+  // smaller cash-due notice further down the page.
   const status =
-    booking?.status === "paid"
-      ? { label: "VALID — PAID", emoji: "✅", classes: "border-green-700 bg-green-950/40 text-green-300" }
-      : booking?.status === "cancelled"
+    booking?.status === "cancelled"
       ? { label: "CANCELLED — DO NOT ADMIT", emoji: "❌", classes: "border-red-800 bg-red-950/40 text-red-300" }
+      : booking?.status === "paid" && booking.payment_terms === "cash_due"
+      ? {
+          label: `NOT PAID — CASH DUE (AOA ${(booking.total_cents / 100).toFixed(2)})`,
+          emoji: "❌",
+          classes: "border-red-800 bg-red-950/40 text-red-300",
+        }
+      : booking?.status === "paid"
+      ? { label: "VALID — PAID", emoji: "✅", classes: "border-green-700 bg-green-950/40 text-green-300" }
       : { label: "PENDING PAYMENT — NOT YET VALID", emoji: "⏳", classes: "border-yellow-800 bg-yellow-950/40 text-yellow-300" };
 
   return (
