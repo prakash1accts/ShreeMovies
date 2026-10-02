@@ -1619,14 +1619,26 @@ export async function listAllBookings(): Promise<BookingWithDetails[]> {
 // and ticket counts are never lost, just no longer cluttering the working
 // list.
 //
-// `movieId` optionally narrows the list to one movie — used by the Bookings
-// admin page's movie filter so a title with hundreds of bookings doesn't
-// bury everything else in the list.
-export async function listActiveBookings(movieId?: string): Promise<BookingWithDetails[]> {
-  if (movieId) {
+// `filters.showtimeId` narrows the list to one specific showtime (e.g. one
+// of a movie's several sessions); `filters.movieId` narrows it to every
+// showtime of one movie. Both are used by the Bookings admin page's filter
+// dropdown so a title — or one busy session of it — doesn't bury everything
+// else in the list. `showtimeId` wins if both are somehow set.
+export async function listActiveBookings(filters?: {
+  movieId?: string;
+  showtimeId?: string;
+}): Promise<BookingWithDetails[]> {
+  if (filters?.showtimeId) {
+    const { rows } = await query<BookingWithDetails>(
+      `${BOOKING_DETAILS_SELECT} WHERE st.closed_at IS NULL AND st.id = $1 ORDER BY b.created_at DESC`,
+      [filters.showtimeId]
+    );
+    return rows;
+  }
+  if (filters?.movieId) {
     const { rows } = await query<BookingWithDetails>(
       `${BOOKING_DETAILS_SELECT} WHERE st.closed_at IS NULL AND m.id = $1 ORDER BY b.created_at DESC`,
-      [movieId]
+      [filters.movieId]
     );
     return rows;
   }
