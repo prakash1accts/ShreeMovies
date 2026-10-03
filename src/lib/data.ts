@@ -661,13 +661,14 @@ export async function createShowtime(params: {
   priceCents: number;
   holdMinutes?: number;
   adminOnlyBooking?: boolean;
+  soldOutOverride?: boolean;
 }): Promise<Showtime> {
   const id = genId("sht");
 
   return withTransaction(async (client) => {
     const { rows } = await clientQuery<Showtime>(
       client,
-      "INSERT INTO showtimes (id, movie_id, screen_id, starts_at, price_cents, hold_minutes, admin_only_booking) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+      "INSERT INTO showtimes (id, movie_id, screen_id, starts_at, price_cents, hold_minutes, admin_only_booking, sold_out_override) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
       [
         id,
         params.movieId,
@@ -676,6 +677,7 @@ export async function createShowtime(params: {
         params.priceCents,
         params.holdMinutes ?? 15,
         params.adminOnlyBooking ?? false,
+        params.soldOutOverride ?? false,
       ]
     );
 
@@ -712,6 +714,7 @@ export async function updateShowtime(params: {
   priceCents: number;
   holdMinutes?: number;
   adminOnlyBooking?: boolean;
+  soldOutOverride?: boolean;
 }): Promise<{ error?: string }> {
   return withTransaction(async (client) => {
     const { rows: existingRows } = await clientQuery<Showtime>(
@@ -740,7 +743,7 @@ export async function updateShowtime(params: {
 
     await clientQuery(
       client,
-      "UPDATE showtimes SET movie_id = $1, screen_id = $2, starts_at = $3, price_cents = $4, hold_minutes = $5, admin_only_booking = $6 WHERE id = $7",
+      "UPDATE showtimes SET movie_id = $1, screen_id = $2, starts_at = $3, price_cents = $4, hold_minutes = $5, admin_only_booking = $6, sold_out_override = $7 WHERE id = $8",
       [
         params.movieId,
         params.screenId,
@@ -748,6 +751,7 @@ export async function updateShowtime(params: {
         params.priceCents,
         params.holdMinutes ?? existing.hold_minutes ?? 15,
         params.adminOnlyBooking ?? existing.admin_only_booking ?? false,
+        params.soldOutOverride ?? existing.sold_out_override ?? false,
         params.id,
       ]
     );

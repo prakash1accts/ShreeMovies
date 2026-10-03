@@ -71,6 +71,12 @@ export interface Showtime {
   // sees a contact message instead of the seat picker. See
   // BOOKING_CONTACT_PHONE in lib/payment-info.ts for the number shown.
   admin_only_booking: boolean;
+  // Manual "Sold out" override — set by an admin from the Edit showtime form
+  // independent of actual remaining seat count (e.g. the last seats are
+  // being held back from online sale). See getSeatAvailabilityForShowtimes
+  // in data.ts for the other, seat-count-based way a showtime reads as sold
+  // out on the movie page.
+  sold_out_override: boolean;
 }
 
 // "blocked" is an admin-only state — a seat taken out of sale (broken seat,

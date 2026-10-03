@@ -77,11 +77,21 @@ CREATE TABLE IF NOT EXISTS showtimes (
   -- message with the booking phone number instead of the seat picker. Set
   -- per-showtime (not global), e.g. for a session being sold by phone/walk-in
   -- only. Reversible from the same Edit showtime form.
-  admin_only_booking BOOLEAN NOT NULL DEFAULT false
+  admin_only_booking BOOLEAN NOT NULL DEFAULT false,
+  -- Manual "Sold out" override, independent of actual remaining seat count.
+  -- Some showtimes get marked sold out for reasons the seat map alone
+  -- wouldn't show (remaining seats held back from online sale, etc.), so an
+  -- admin can flip this on from the Edit showtime form to make the movie
+  -- page's button read "Sold out" even while seats technically remain.
+  -- Reversible from the same form. A showtime whose seats are genuinely all
+  -- gone still reads "Sold out" too (see getSeatAvailabilityForShowtimes in
+  -- data.ts) — this column only covers the extra, non-seat-count case.
+  sold_out_override BOOLEAN NOT NULL DEFAULT false
 );
 ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS hold_minutes INTEGER NOT NULL DEFAULT 15;
 ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
 ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS admin_only_booking BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS sold_out_override BOOLEAN NOT NULL DEFAULT false;
 
 -- One row per seat per showtime, created at showtime-creation time
 CREATE TABLE IF NOT EXISTS seats (
