@@ -115,7 +115,13 @@ export default async function MovieDetailPage({
                       </span>
                       {(() => {
                         const seats = availability[st.id];
-                        const soldOut = Boolean(seats && seats.total > 0 && seats.available === 0);
+                        // Sold out either because an admin explicitly marked
+                        // it so (some seats held back from online sale even
+                        // though the seat map shows them open), or because
+                        // every seat has genuinely been booked/blocked.
+                        const soldOut =
+                          st.sold_out_override ||
+                          Boolean(seats && seats.total > 0 && seats.available === 0);
 
                         // Genuinely no seats left — there's nothing to pick on
                         // the seat picker regardless of who's looking, so this
