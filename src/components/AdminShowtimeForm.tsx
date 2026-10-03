@@ -138,6 +138,24 @@ export default function AdminShowtimeForm({
           </span>
         </label>
       </div>
+      <div className="sm:col-span-2">
+        <label className="flex items-start gap-2 text-sm text-neutral-300">
+          <input
+            type="checkbox"
+            name="soldOutOverride"
+            defaultChecked={showtime?.sold_out_override ?? false}
+            className="mt-0.5 h-4 w-4 rounded border-neutral-700 bg-neutral-950 accent-red-600"
+          />
+          <span>
+            Mark sold out
+            <span className="mt-0.5 block text-xs text-neutral-500">
+              Shows a disabled &quot;Sold out&quot; label on the movie page instead of a bookable
+              button for this showtime — regardless of how many seats technically remain. Use
+              this when the leftover seats aren&apos;t actually being sold online.
+            </span>
+          </span>
+        </label>
+      </div>
 
       {state?.error && (
         <p className="sm:col-span-2 text-sm text-red-400">{state.error}</p>
