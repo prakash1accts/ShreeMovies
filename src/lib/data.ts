@@ -571,6 +571,39 @@ export async function getAdmissionStatsForShowtimes(
   return result;
 }
 
+// Batch-computes, per showtime, how many seats still have status
+// 'available' out of the screen's total seat count — this is what powers
+// the "Sold out" label on the movie detail page's per-showtime booking
+// button (available === 0 means every seat is booked/held/blocked, so
+// there's nothing left to sell). Releases stale seat holds first for each
+// showtime so a showtime isn't shown as sold out just because its last few
+// seats are sitting on an expired, abandoned hold. One grouped query for
+// all requested showtimes, same batching pattern as
+// getAdmissionStatsForShowtimes above.
+export async function getSeatAvailabilityForShowtimes(
+  showtimeIds: string[]
+): Promise<Record<string, { available: number; total: number }>> {
+  const result: Record<string, { available: number; total: number }> = {};
+  for (const id of showtimeIds) result[id] = { available: 0, total: 0 };
+  if (showtimeIds.length === 0) return result;
+
+  await Promise.all(showtimeIds.map((id) => releaseStaleHolds(id)));
+
+  const { rows } = await query<{ showtime_id: string; total: string; available: string }>(
+    `SELECT showtime_id,
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE status = 'available') as available
+     FROM seats
+     WHERE showtime_id = ANY($1)
+     GROUP BY showtime_id`,
+    [showtimeIds]
+  );
+  for (const row of rows) {
+    result[row.showtime_id] = { available: Number(row.available), total: Number(row.total) };
+  }
+  return result;
+}
+
 // Only showtimes that haven't started yet — used for the admin "new
 // booking" screen so staff aren't selling tickets for a show that already
 // happened.
