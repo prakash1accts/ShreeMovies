@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getMovie, listShowtimesForMovie } from "@/lib/data";
+import { getMovie, getSeatAvailabilityForShowtimes, listShowtimesForMovie } from "@/lib/data";
 import { getSession } from "@/lib/auth";
 import PosterImage from "@/components/PosterImage";
 import { formatVenueDate, formatVenueTime } from "@/lib/timezone";
@@ -19,6 +19,12 @@ export default async function MovieDetailPage({
   if (!movie || (movie.archived_at && !isAdmin)) notFound();
 
   const showtimes = await listShowtimesForMovie(id);
+
+  // A showtime reads as "Sold out" instead of a bookable "Book ticket"
+  // button once it has zero seats left with status 'available' — e.g.
+  // today's and tomorrow's fully-booked Drishyam shows — while a showtime
+  // that still has open seats (like next week's) keeps the normal button.
+  const availability = await getSeatAvailabilityForShowtimes(showtimes.map((st) => st.id));
 
   // Group showtimes by calendar day for a cleaner layout
   const byDay = new Map<string, typeof showtimes>();
@@ -107,21 +113,44 @@ export default async function MovieDetailPage({
                         })}
                         <span className="ml-2 text-neutral-500">{st.screen_name}</span>
                       </span>
-                      {st.admin_only_booking && !isAdmin ? (
-                        <Link
-                          href={`/showtimes/${st.id}`}
-                          className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-semibold text-neutral-300 transition hover:border-neutral-500"
-                        >
-                          Contact to book
-                        </Link>
-                      ) : (
-                        <Link
-                          href={`/showtimes/${st.id}`}
-                          className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
-                        >
-                          Book ticket
-                        </Link>
-                      )}
+                      {(() => {
+                        const seats = availability[st.id];
+                        const soldOut = Boolean(seats && seats.total > 0 && seats.available === 0);
+
+                        // Genuinely no seats left — there's nothing to pick on
+                        // the seat picker regardless of who's looking, so this
+                        // takes priority over the admin-only-booking case too.
+                        if (soldOut) {
+                          return (
+                            <span
+                              className="cursor-not-allowed rounded-md bg-neutral-800 px-3 py-1.5 text-xs font-semibold text-neutral-500"
+                              title="No seats left for this showtime"
+                            >
+                              Sold out
+                            </span>
+                          );
+                        }
+
+                        if (st.admin_only_booking && !isAdmin) {
+                          return (
+                            <Link
+                              href={`/showtimes/${st.id}`}
+                              className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-semibold text-neutral-300 transition hover:border-neutral-500"
+                            >
+                              Contact to book
+                            </Link>
+                          );
+                        }
+
+                        return (
+                          <Link
+                            href={`/showtimes/${st.id}`}
+                            className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
+                          >
+                            Book ticket
+                          </Link>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
