@@ -267,6 +267,7 @@ export async function createShowtimeAction(
   const holdMinutes =
     Number.isFinite(holdMinutesRaw) && holdMinutesRaw > 0 ? Math.round(holdMinutesRaw) : 15;
   const adminOnlyBooking = formData.get("adminOnlyBooking") === "on";
+  const soldOutOverride = formData.get("soldOutOverride") === "on";
 
   if (!movieId || !screenId || !date || !time) {
     return { error: "Please fill in all fields." };
@@ -284,6 +285,7 @@ export async function createShowtimeAction(
     priceCents: Math.round(price * 100),
     holdMinutes,
     adminOnlyBooking,
+    soldOutOverride,
   });
 
   revalidatePath("/admin/showtimes");
@@ -307,6 +309,7 @@ export async function updateShowtimeAction(
   const holdMinutes =
     Number.isFinite(holdMinutesRaw) && holdMinutesRaw > 0 ? Math.round(holdMinutesRaw) : 15;
   const adminOnlyBooking = formData.get("adminOnlyBooking") === "on";
+  const soldOutOverride = formData.get("soldOutOverride") === "on";
 
   if (!id) return { error: "Missing showtime id." };
   if (!movieId || !screenId || !date || !time) {
@@ -326,6 +329,7 @@ export async function updateShowtimeAction(
     priceCents: Math.round(price * 100),
     holdMinutes,
     adminOnlyBooking,
+    soldOutOverride,
   });
 
   if (result.error) return { error: result.error };
