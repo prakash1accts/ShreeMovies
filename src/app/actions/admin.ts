@@ -31,6 +31,7 @@ import {
   resetCheckInsForShowtime,
   resyncShowtimeSeats,
   restoreBooking,
+  saveMovieSettlementCosts,
   setUserBlocked,
   setUserPassword,
   unarchiveMovie,
@@ -882,4 +883,43 @@ export async function resetUserPasswordAction(formData: FormData) {
   const passwordHash = await hashPassword(newPassword);
   await setUserPassword(id, passwordHash);
   revalidatePath("/admin/users");
+}
+
+// Saves the three admin-entered figures behind a movie's settlement report —
+// theatre cost (AOA), distribution cost (USD), and the exchange rate used to
+// combine them with ticket revenue into one profit figure in each currency.
+// Everything else on that report (tickets sold, revenue) is computed live
+// from bookings, never typed in. See AdminMovieSettlement.tsx for the form
+// and getMovieSettlement in data.ts for the computed side.
+export async function saveMovieSettlementCostsAction(
+  _prevState: { error?: string } | undefined,
+  formData: FormData
+) {
+  await requireAdmin();
+
+  const movieId = String(formData.get("movieId") || "");
+  const theatreCost = Number(formData.get("theatreCost") || 0);
+  const distributionCostUsd = Number(formData.get("distributionCostUsd") || 0);
+  const exchangeRate = Number(formData.get("exchangeRate") || 0);
+
+  if (!movieId) return { error: "Missing movie id." };
+  if (!Number.isFinite(theatreCost) || theatreCost < 0) {
+    return { error: "Theatre cost must be a positive number." };
+  }
+  if (!Number.isFinite(distributionCostUsd) || distributionCostUsd < 0) {
+    return { error: "Distribution cost must be a positive number." };
+  }
+  if (!Number.isFinite(exchangeRate) || exchangeRate <= 0) {
+    return { error: "Exchange rate must be a positive number (AOA per 1 USD)." };
+  }
+
+  await saveMovieSettlementCosts({
+    movieId,
+    theatreCostCents: Math.round(theatreCost * 100),
+    distributionCostUsdCents: Math.round(distributionCostUsd * 100),
+    exchangeRateAoaPerUsd: exchangeRate,
+  });
+
+  revalidatePath(`/admin/reports/movie/${movieId}`);
+  return { error: undefined };
 }
