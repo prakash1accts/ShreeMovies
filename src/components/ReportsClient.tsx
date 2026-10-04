@@ -65,6 +65,19 @@ function compareByBookingRef(a: BookingWithDetails, b: BookingWithDetails): numb
   return 0;
 }
 
+// "Deposit" covers both a walk-in sale explicitly marked "deposit" AND every
+// online booking — payment_terms is never set for those (this app has no
+// live card payment gateway connected; an online booking is always
+// confirmed by an admin after a bank transfer comes in, same as a walk-in
+// deposit). "Cash" covers a box-office cash sale, and one marked "cash due"
+// — ticket printed, seat locked in, but staff haven't actually collected
+// the cash at the door yet. A "due" sale still counts toward today's Cash
+// total (see the Collections report section), but is flagged per-row so it
+// isn't mistaken for cash already in hand.
+function paymentMethod(b: BookingWithDetails): "Cash" | "Deposit" {
+  return b.payment_terms === "cash" || b.payment_terms === "cash_due" ? "Cash" : "Deposit";
+}
+
 export default function ReportsClient({
   bookings,
   showtimes,
@@ -78,7 +91,10 @@ export default function ReportsClient({
   const [settlementMovieId, setSettlementMovieId] = useState<string>("");
   const [showtimeId, setShowtimeId] = useState<string>("");
   const [absenteeShowtimeId, setAbsenteeShowtimeId] = useState<string>("");
-  const [printMode, setPrintMode] = useState<"audience" | "security" | "absentee" | null>(null);
+  const [collectionsShowtimeId, setCollectionsShowtimeId] = useState<string>("");
+  const [printMode, setPrintMode] = useState<
+    "audience" | "security" | "absentee" | "collections" | null
+  >(null);
   const [resetShowtimeId, setResetShowtimeId] = useState<string>("");
   const [resetConfirming, setResetConfirming] = useState(false);
   const [resetPending, setResetPending] = useState(false);
@@ -109,6 +125,40 @@ export default function ReportsClient({
       ),
     [paidBookings, absenteeShowtimeId]
   );
+
+  // Confirmed (paid) bookings only — same selection as the security report
+  // — optionally narrowed to one showtime, so cash collected at one specific
+  // show can be checked against what's physically in hand.
+  const collectionsRows = useMemo(
+    () =>
+      paidBookings.filter(
+        (b) => !collectionsShowtimeId || b.showtime_id === collectionsShowtimeId
+      ),
+    [paidBookings, collectionsShowtimeId]
+  );
+
+  const collectionsTotals = useMemo(() => {
+    let depositCents = 0;
+    let depositCount = 0;
+    let cashCents = 0;
+    let cashCount = 0;
+    let cashDueCents = 0;
+    let cashDueCount = 0;
+    for (const b of collectionsRows) {
+      if (paymentMethod(b) === "Cash") {
+        cashCents += b.total_cents;
+        cashCount += 1;
+        if (b.payment_terms === "cash_due") {
+          cashDueCents += b.total_cents;
+          cashDueCount += 1;
+        }
+      } else {
+        depositCents += b.total_cents;
+        depositCount += 1;
+      }
+    }
+    return { depositCents, depositCount, cashCents, cashCount, cashDueCents, cashDueCount };
+  }, [collectionsRows]);
 
   // How many bookings under the chosen showtime are currently marked
   // admitted — shown next to the Reset check-ins button so whoever's about
@@ -233,6 +283,51 @@ export default function ReportsClient({
     downloadText("absentee-report.csv", toCSV([header, ...rows]));
   }
 
+  function exportCollectionsCSV() {
+    const header = ["Customer", "Showtime", "No. of Tickets", "Value (AOA)", "Payment method"];
+    const rows = collectionsRows.map((b) => [
+      b.customer_name || "—",
+      `${b.movie_title} — ${formatVenueDateTime(b.starts_at)}`,
+      String(ticketCount(b)),
+      (b.total_cents / 100).toFixed(2),
+      paymentMethod(b) === "Cash" && b.payment_terms === "cash_due" ? "Cash (due)" : paymentMethod(b),
+    ]);
+    const summary: string[][] = [
+      [],
+      [
+        "Deposit total",
+        "",
+        "",
+        (collectionsTotals.depositCents / 100).toFixed(2),
+        `${collectionsTotals.depositCount} booking(s)`,
+      ],
+      [
+        "Cash total",
+        "",
+        "",
+        (collectionsTotals.cashCents / 100).toFixed(2),
+        `${collectionsTotals.cashCount} booking(s)`,
+      ],
+    ];
+    if (collectionsTotals.cashDueCents > 0) {
+      summary.push([
+        "  incl. still due (not yet collected)",
+        "",
+        "",
+        (collectionsTotals.cashDueCents / 100).toFixed(2),
+        `${collectionsTotals.cashDueCount} booking(s)`,
+      ]);
+    }
+    summary.push([
+      "Grand total",
+      "",
+      "",
+      ((collectionsTotals.depositCents + collectionsTotals.cashCents) / 100).toFixed(2),
+      "",
+    ]);
+    downloadText("collections-report.csv", toCSV([header, ...rows, ...summary]));
+  }
+
   function printAudience() {
     setPrintMode("audience");
     setTimeout(() => window.print(), 50);
@@ -245,6 +340,11 @@ export default function ReportsClient({
 
   function printAbsentee() {
     setPrintMode("absentee");
+    setTimeout(() => window.print(), 50);
+  }
+
+  function printCollections() {
+    setPrintMode("collections");
     setTimeout(() => window.print(), 50);
   }
 
@@ -315,6 +415,123 @@ export default function ReportsClient({
             >
               View report
             </button>
+          )}
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900 p-5 print:hidden">
+        <h2 className="font-semibold">Collections report</h2>
+        <p className="mt-1 text-sm text-neutral-400">
+          Confirmed (paid) bookings only, split by how they were paid. Deposit covers a bank
+          transfer and every online booking (this app has no live card payment gateway — an
+          online booking is always confirmed by an admin after a bank transfer comes in, same as
+          a walk-in deposit). Cash covers a box-office cash sale, including one marked
+          &quot;cash due&quot; that staff haven&apos;t actually collected yet — still counted in
+          today&apos;s Cash total, but flagged per row below. Pick a showtime to check one
+          show&apos;s cash against what&apos;s physically in hand.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <select
+            value={collectionsShowtimeId}
+            onChange={(e) => setCollectionsShowtimeId(e.target.value)}
+            className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
+          >
+            <option value="">All showtimes</option>
+            {showtimes.map((st) => (
+              <option key={st.id} value={st.id}>
+                {st.movie_title} — {formatVenueDateTime(st.starts_at)}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={exportCollectionsCSV}
+            className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-200 hover:bg-neutral-700"
+          >
+            Download CSV
+          </button>
+          <button
+            onClick={printCollections}
+            className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-200 hover:bg-neutral-700"
+          >
+            Print / Save as PDF
+          </button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-md border border-neutral-800 p-3">
+            <div className="text-xs uppercase tracking-wide text-neutral-500">Deposit</div>
+            <div className="mt-1 text-lg font-semibold text-neutral-100">
+              AOA {(collectionsTotals.depositCents / 100).toFixed(2)}
+            </div>
+            <div className="text-xs text-neutral-500">
+              {collectionsTotals.depositCount} booking(s)
+            </div>
+          </div>
+          <div className="rounded-md border border-neutral-800 p-3">
+            <div className="text-xs uppercase tracking-wide text-neutral-500">Cash</div>
+            <div className="mt-1 text-lg font-semibold text-neutral-100">
+              AOA {(collectionsTotals.cashCents / 100).toFixed(2)}
+            </div>
+            <div className="text-xs text-neutral-500">
+              {collectionsTotals.cashCount} booking(s)
+              {collectionsTotals.cashDueCents > 0 && (
+                <>
+                  {" "}
+                  · incl. AOA {(collectionsTotals.cashDueCents / 100).toFixed(2)} still due (
+                  {collectionsTotals.cashDueCount})
+                </>
+              )}
+            </div>
+          </div>
+          <div className="rounded-md border border-neutral-800 p-3">
+            <div className="text-xs uppercase tracking-wide text-neutral-500">Total</div>
+            <div className="mt-1 text-lg font-semibold text-neutral-100">
+              AOA{" "}
+              {((collectionsTotals.depositCents + collectionsTotals.cashCents) / 100).toFixed(2)}
+            </div>
+            <div className="text-xs text-neutral-500">{collectionsRows.length} booking(s)</div>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-x-auto rounded-md border border-neutral-800">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-neutral-950 text-neutral-400">
+              <tr>
+                <th className="px-3 py-2">Customer</th>
+                <th className="px-3 py-2">Showtime</th>
+                <th className="px-3 py-2">Tickets</th>
+                <th className="px-3 py-2">Value (AOA)</th>
+                <th className="px-3 py-2">Payment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {collectionsRows.map((b) => (
+                <tr key={b.id} className="border-t border-neutral-800">
+                  <td className="px-3 py-2">{b.customer_name || "—"}</td>
+                  <td className="px-3 py-2 text-neutral-400">
+                    {b.movie_title} — {formatVenueDateTime(b.starts_at)}
+                  </td>
+                  <td className="px-3 py-2 text-neutral-400">{ticketCount(b)}</td>
+                  <td className="px-3 py-2 text-neutral-400">
+                    {(b.total_cents / 100).toFixed(2)}
+                  </td>
+                  <td className="px-3 py-2">
+                    {paymentMethod(b) === "Cash" ? (
+                      <span className="text-amber-400">
+                        Cash{b.payment_terms === "cash_due" ? " (due)" : ""}
+                      </span>
+                    ) : (
+                      <span className="text-sky-400">Deposit</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {collectionsRows.length === 0 && (
+            <div className="p-4 text-center text-sm text-neutral-500">
+              No paid bookings for this selection.
+            </div>
           )}
         </div>
       </section>
@@ -568,6 +785,69 @@ export default function ReportsClient({
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Printable collections report */}
+      <div className={`mt-8 ${printMode === "collections" ? "hidden print:block" : "hidden"}`}>
+        <h2 className="text-lg font-bold text-black">Collections Report</h2>
+        <p className="text-sm text-neutral-700">
+          {collectionsShowtimeId
+            ? showtimes.find((s) => s.id === collectionsShowtimeId)?.movie_title +
+              " — " +
+              formatVenueDateTime(
+                showtimes.find((s) => s.id === collectionsShowtimeId)?.starts_at ?? ""
+              )
+            : "All showtimes"}
+        </p>
+        <table className="mt-3 w-full border-collapse text-sm text-black">
+          <thead>
+            <tr className="border-b border-black">
+              <th className="py-1 text-left">Customer</th>
+              <th className="py-1 text-left">Showtime</th>
+              <th className="py-1 text-left">Tickets</th>
+              <th className="py-1 text-left">Value (AOA)</th>
+              <th className="py-1 text-left">Payment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {collectionsRows.map((b) => (
+              <tr key={b.id} className="border-b border-neutral-400">
+                <td className="py-1">{b.customer_name || "—"}</td>
+                <td className="py-1">
+                  {b.movie_title} — {formatVenueDateTime(b.starts_at)}
+                </td>
+                <td className="py-1">{ticketCount(b)}</td>
+                <td className="py-1">{(b.total_cents / 100).toFixed(2)}</td>
+                <td className="py-1">
+                  {paymentMethod(b)}
+                  {b.payment_terms === "cash_due" ? " (due)" : ""}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="mt-3 space-y-1 border-t-2 border-black pt-2 text-sm font-semibold text-black">
+          <div className="flex items-center justify-between">
+            <span>Deposit total ({collectionsTotals.depositCount})</span>
+            <span>AOA {(collectionsTotals.depositCents / 100).toFixed(2)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>
+              Cash total ({collectionsTotals.cashCount})
+              {collectionsTotals.cashDueCents > 0
+                ? ` — incl. AOA ${(collectionsTotals.cashDueCents / 100).toFixed(2)} still due`
+                : ""}
+            </span>
+            <span>AOA {(collectionsTotals.cashCents / 100).toFixed(2)}</span>
+          </div>
+          <div className="flex items-center justify-between border-t border-black pt-1">
+            <span>Grand total</span>
+            <span>
+              AOA{" "}
+              {((collectionsTotals.depositCents + collectionsTotals.cashCents) / 100).toFixed(2)}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Printable audience report — grouped by movie + showtime so that
