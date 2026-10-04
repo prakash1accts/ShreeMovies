@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { BookingWithDetails, ShowtimeWithMovie } from "@/lib/data";
+import type { Movie } from "@/lib/types";
 import { resetShowtimeCheckInsAction } from "@/app/actions/admin";
 import { formatVenueDateTime } from "@/lib/timezone";
 
@@ -66,11 +68,14 @@ function compareByBookingRef(a: BookingWithDetails, b: BookingWithDetails): numb
 export default function ReportsClient({
   bookings,
   showtimes,
+  movies,
 }: {
   bookings: BookingWithDetails[];
   showtimes: ShowtimeWithMovie[];
+  movies: Movie[];
 }) {
   const router = useRouter();
+  const [settlementMovieId, setSettlementMovieId] = useState<string>("");
   const [showtimeId, setShowtimeId] = useState<string>("");
   const [absenteeShowtimeId, setAbsenteeShowtimeId] = useState<string>("");
   const [printMode, setPrintMode] = useState<"audience" | "security" | "absentee" | null>(null);
@@ -274,6 +279,45 @@ export default function ReportsClient({
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <h1 className="text-2xl font-bold">Reports</h1>
       </div>
+
+      <section className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900 p-5 print:hidden">
+        <h2 className="font-semibold">Settlement report</h2>
+        <p className="mt-1 text-sm text-neutral-400">
+          Final per-movie report — tickets sold and revenue across every showtime, with theatre
+          and distribution costs you enter, ending in a profit figure in AOA and USD. Best run
+          once a movie&apos;s shows are closed.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <select
+            value={settlementMovieId}
+            onChange={(e) => setSettlementMovieId(e.target.value)}
+            className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
+          >
+            <option value="">Choose a movie…</option>
+            {movies.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.title}
+              </option>
+            ))}
+          </select>
+          {settlementMovieId ? (
+            <Link
+              href={`/admin/reports/movie/${settlementMovieId}`}
+              className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
+            >
+              View report
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-500 cursor-not-allowed"
+            >
+              View report
+            </button>
+          )}
+        </div>
+      </section>
 
       <section className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900 p-5 print:hidden">
         <h2 className="font-semibold">Audience report</h2>
