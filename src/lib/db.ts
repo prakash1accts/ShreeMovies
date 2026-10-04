@@ -38,6 +38,14 @@ if (process.env.NODE_ENV !== "production") {
   global.__cinemaPool = pool;
 }
 
+// pg emits 'error' on an already-idle client (e.g. the DB terminated it
+// server-side). Left unhandled, that's an uncaught exception that can take
+// down the whole warm serverless process. A no-op listener here just lets
+// the pool drop the dead client and open a fresh one on the next query.
+pool.on("error", (err) => {
+  console.error("Postgres pool idle client error:", err);
+});
+
 function ensureSchema() {
   const schemaPath = path.join(process.cwd(), "src", "lib", "schema.sql");
   const schema = fs.readFileSync(schemaPath, "utf-8");
@@ -46,9 +54,20 @@ function ensureSchema() {
 
 // The schema uses CREATE TABLE IF NOT EXISTS, so re-running it on every cold
 // start is safe and keeps a fresh database self-provisioning on first use.
+//
+// If ensureSchema() ever rejects (a transient DB hiccup — e.g. Neon's compute
+// waking from idle, or a brief connection-limit spike), that rejection must
+// NOT stay cached: a warm serverless instance can keep serving requests for a
+// long time afterward, and without clearing the cache here every request it
+// handles would immediately fail with the same stale error forever, even
+// after the underlying DB problem has resolved. Clearing it lets the next
+// request retry from scratch.
 export function ready(): Promise<void> {
   if (!global.__cinemaSchemaReady) {
-    global.__cinemaSchemaReady = ensureSchema();
+    global.__cinemaSchemaReady = ensureSchema().catch((err) => {
+      global.__cinemaSchemaReady = undefined;
+      throw err;
+    });
   }
   return global.__cinemaSchemaReady;
 }
