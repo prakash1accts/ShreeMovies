@@ -174,6 +174,12 @@ export default async function AdminShowtimesPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Link
+                      href={`/admin/reports/movie/${st.movie_id}`}
+                      className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-700"
+                    >
+                      Settlement report
+                    </Link>
+                    <Link
                       href="/admin/reports"
                       className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-700"
                     >
