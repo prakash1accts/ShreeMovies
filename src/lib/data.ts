@@ -1800,3 +1800,138 @@ export async function getVoterVotes(
   for (const row of rows) result[row.movie_id] = row.vote as VoteValue;
   return result;
 }
+
+// ---------- Movie settlement report ----------
+// A "final report" for a movie, built once its shows are done: how many
+// tickets it sold and how much it made across every one of its showtimes,
+// against the two costs an admin types in (theatre cost in AOA, distribution
+// cost in USD), ending in a profit figure in both currencies. See
+// AdminMovieSettlement.tsx for the form/report UI and
+// saveMovieSettlementCostsAction in actions/admin.ts.
+
+export interface MovieSettlementCosts {
+  movie_id: string;
+  theatre_cost_cents: number;
+  distribution_cost_usd_cents: number;
+  exchange_rate_aoa_per_usd: number;
+  updated_at: string;
+}
+
+export async function getMovieSettlementCosts(
+  movieId: string
+): Promise<MovieSettlementCosts | undefined> {
+  const { rows } = await query<MovieSettlementCosts>(
+    "SELECT * FROM movie_settlement_costs WHERE movie_id = $1",
+    [movieId]
+  );
+  return rows[0];
+}
+
+// One row per movie — saving again simply overwrites the previous figures,
+// since the report always wants the latest cost inputs rather than a history
+// of edits.
+export async function saveMovieSettlementCosts(params: {
+  movieId: string;
+  theatreCostCents: number;
+  distributionCostUsdCents: number;
+  exchangeRateAoaPerUsd: number;
+}): Promise<void> {
+  await query(
+    `INSERT INTO movie_settlement_costs
+       (movie_id, theatre_cost_cents, distribution_cost_usd_cents, exchange_rate_aoa_per_usd, updated_at)
+     VALUES ($1, $2, $3, $4, now())
+     ON CONFLICT (movie_id) DO UPDATE SET
+       theatre_cost_cents = EXCLUDED.theatre_cost_cents,
+       distribution_cost_usd_cents = EXCLUDED.distribution_cost_usd_cents,
+       exchange_rate_aoa_per_usd = EXCLUDED.exchange_rate_aoa_per_usd,
+       updated_at = now()`,
+    [
+      params.movieId,
+      params.theatreCostCents,
+      params.distributionCostUsdCents,
+      params.exchangeRateAoaPerUsd,
+    ]
+  );
+}
+
+export interface MovieSettlementShowtimeRow {
+  showtimeId: string;
+  startsAt: string;
+  screenName: string;
+  closedAt: string | null;
+  tickets: number;
+  revenueCents: number;
+}
+
+export interface MovieSettlement {
+  movieId: string;
+  movieTitle: string;
+  rows: MovieSettlementShowtimeRow[];
+  totalTickets: number;
+  totalRevenueCents: number;
+  // True when at least one of the movie's showtimes hasn't been closed yet —
+  // shown as a caveat on the report, since its totals can still move until
+  // every showtime is closed.
+  anyOpenShowtimes: boolean;
+}
+
+// Pulls together every showtime a movie has ever had, with ticket counts and
+// revenue aggregated the same way the audience report does (ReportsClient.tsx):
+// every non-cancelled booking counts — paid and pending both — since a
+// cancelled booking's seats were released and were never actually sold.
+// Ticket count comes from booking_seats (the actual seats held), the same
+// source of truth seat_labels uses elsewhere, so it can never drift from a
+// separately-stored count.
+export async function getMovieSettlement(movieId: string): Promise<MovieSettlement | undefined> {
+  const movie = await getMovie(movieId);
+  if (!movie) return undefined;
+
+  const { rows } = await query<{
+    showtime_id: string;
+    starts_at: string;
+    screen_name: string;
+    closed_at: string | null;
+    tickets: string;
+    revenue_cents: string;
+  }>(
+    `SELECT st.id as showtime_id, st.starts_at, sc.name as screen_name, st.closed_at,
+            COALESCE(bs_counts.tickets, 0) as tickets,
+            COALESCE(b_sums.revenue_cents, 0) as revenue_cents
+     FROM showtimes st
+     JOIN screens sc ON sc.id = st.screen_id
+     LEFT JOIN (
+       SELECT b.showtime_id, SUM(b.total_cents) as revenue_cents
+       FROM bookings b
+       WHERE b.status != 'cancelled'
+       GROUP BY b.showtime_id
+     ) b_sums ON b_sums.showtime_id = st.id
+     LEFT JOIN (
+       SELECT b.showtime_id, COUNT(bs.seat_id) as tickets
+       FROM bookings b
+       JOIN booking_seats bs ON bs.booking_id = b.id
+       WHERE b.status != 'cancelled'
+       GROUP BY b.showtime_id
+     ) bs_counts ON bs_counts.showtime_id = st.id
+     WHERE st.movie_id = $1
+     ORDER BY st.starts_at ASC`,
+    [movieId]
+  );
+
+  const settlementRows: MovieSettlementShowtimeRow[] = rows.map((r) => ({
+    showtimeId: r.showtime_id,
+    startsAt: r.starts_at,
+    screenName: r.screen_name,
+    closedAt: r.closed_at,
+    tickets: Number(r.tickets),
+    revenueCents: Number(r.revenue_cents),
+  }));
+
+  return {
+    movieId: movie.id,
+    movieTitle: movie.title,
+    rows: settlementRows,
+    totalTickets: settlementRows.reduce((sum, r) => sum + r.tickets, 0),
+    totalRevenueCents: settlementRows.reduce((sum, r) => sum + r.revenueCents, 0),
+    anyOpenShowtimes: settlementRows.some((r) => !r.closedAt),
+  };
+}

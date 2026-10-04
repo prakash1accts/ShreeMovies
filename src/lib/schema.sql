@@ -201,6 +201,25 @@ CREATE TABLE IF NOT EXISTS movie_votes (
   UNIQUE(movie_id, voter_key)
 );
 
+-- Admin-entered cost inputs for a movie's settlement report (the "final
+-- report" shown once a movie's shows are closed): Total No. of tickets sold
+-- and Total value of amount are always computed live from bookings/showtimes
+-- (see getMovieSettlement in data.ts) — only these three figures are ever
+-- typed in by hand, and they're kept here so they survive between visits to
+-- the report. theatre_cost_cents is in AOA (same cents convention as
+-- price_cents elsewhere); distribution_cost_usd_cents is in USD. The
+-- exchange rate is re-entered by the admin each time the report is opened
+-- (rates move day to day), but the last one used is remembered here as the
+-- default so re-opening the report isn't a blank form. One row per movie —
+-- saving the form again overwrites the previous figures for that movie.
+CREATE TABLE IF NOT EXISTS movie_settlement_costs (
+  movie_id TEXT PRIMARY KEY REFERENCES movies(id) ON DELETE CASCADE,
+  theatre_cost_cents BIGINT NOT NULL DEFAULT 0,
+  distribution_cost_usd_cents BIGINT NOT NULL DEFAULT 0,
+  exchange_rate_aoa_per_usd NUMERIC(14,4) NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_showtimes_movie ON showtimes(movie_id);
 CREATE INDEX IF NOT EXISTS idx_seats_showtime ON seats(showtime_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings(user_id);
