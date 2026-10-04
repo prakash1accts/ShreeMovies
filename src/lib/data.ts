@@ -1935,3 +1935,97 @@ export async function getMovieSettlement(movieId: string): Promise<MovieSettleme
     anyOpenShowtimes: settlementRows.some((r) => !r.closedAt),
   };
 }
+
+// ---------- Customers by movie ----------
+// Who actually watched a given movie, for re-contacting them about a future
+// one (a WhatsApp campaign, a promo code for the sequel, etc.) — the same
+// master phone directory as the Customers page, filtered down to people
+// with a paid booking for this movie specifically. See
+// AdminCustomersTable.tsx for the UI.
+
+export interface MovieCustomerRow {
+  phone: string;
+  name: string | null;
+  whatsapp: string | null;
+  // How many separate bookings (and total tickets across them) this phone
+  // number paid for under this movie — a repeat booker (e.g. came back for
+  // a second showtime) shows up once here, not twice.
+  bookings: number;
+  tickets: number;
+  lastBookedAt: string;
+}
+
+export interface MovieCustomerList {
+  movieId: string;
+  movieTitle: string;
+  rows: MovieCustomerRow[];
+  // Paid bookings for this movie that had no phone on file at all (e.g. an
+  // old walk-in sale entered before a number was captured) — nobody to
+  // contact for those, so they're left out of `rows` but counted here so
+  // the admin knows the list isn't the full audience.
+  noPhoneBookings: number;
+}
+
+export async function listCustomersForMovie(
+  movieId: string
+): Promise<MovieCustomerList | undefined> {
+  const movie = await getMovie(movieId);
+  if (!movie) return undefined;
+
+  const { rows } = await query<{
+    phone: string;
+    name: string | null;
+    whatsapp: string | null;
+    bookings: string;
+    tickets: string;
+    last_booked_at: string;
+  }>(
+    `SELECT
+       phone,
+       (array_agg(name ORDER BY created_at DESC))[1] as name,
+       (array_agg(whatsapp ORDER BY created_at DESC) FILTER (WHERE whatsapp IS NOT NULL))[1] as whatsapp,
+       COUNT(*) as bookings,
+       SUM(tickets) as tickets,
+       MAX(created_at) as last_booked_at
+     FROM (
+       SELECT b.id, b.created_at,
+              COALESCE(c.phone, u.phone) as phone,
+              COALESCE(c.whatsapp, u.whatsapp) as whatsapp,
+              COALESCE(b.customer_name, c.name, u.name) as name,
+              (SELECT COUNT(*) FROM booking_seats bs WHERE bs.booking_id = b.id) as tickets
+       FROM bookings b
+       JOIN showtimes st ON st.id = b.showtime_id
+       LEFT JOIN users u ON u.id = b.user_id
+       LEFT JOIN customers c ON c.id = b.customer_id
+       WHERE st.movie_id = $1 AND b.status = 'paid'
+     ) sub
+     WHERE phone IS NOT NULL
+     GROUP BY phone
+     ORDER BY name ASC NULLS LAST`,
+    [movieId]
+  );
+
+  const { rows: missingPhoneRows } = await query<{ count: string }>(
+    `SELECT COUNT(*) as count
+     FROM bookings b
+     JOIN showtimes st ON st.id = b.showtime_id
+     LEFT JOIN users u ON u.id = b.user_id
+     LEFT JOIN customers c ON c.id = b.customer_id
+     WHERE st.movie_id = $1 AND b.status = 'paid' AND COALESCE(c.phone, u.phone) IS NULL`,
+    [movieId]
+  );
+
+  return {
+    movieId: movie.id,
+    movieTitle: movie.title,
+    rows: rows.map((r) => ({
+      phone: r.phone,
+      name: r.name,
+      whatsapp: r.whatsapp,
+      bookings: Number(r.bookings),
+      tickets: Number(r.tickets),
+      lastBookedAt: r.last_booked_at,
+    })),
+    noPhoneBookings: Number(missingPhoneRows[0]?.count || 0),
+  };
+}
