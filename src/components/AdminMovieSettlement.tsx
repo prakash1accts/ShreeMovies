@@ -65,12 +65,20 @@ export default function AdminMovieSettlement({
           <h1 className="text-2xl font-bold">{settlement.movieTitle}</h1>
           <p className="mt-1 text-sm text-neutral-400">Settlement report — all showtimes</p>
         </div>
-        <Link
-          href="/admin/reports"
-          className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-700"
-        >
-          Back to Reports
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/admin/customers?movieId=${settlement.movieId}`}
+            className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-700"
+          >
+            Customer list
+          </Link>
+          <Link
+            href="/admin/reports"
+            className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-700"
+          >
+            Back to Reports
+          </Link>
+        </div>
       </div>
 
       {settlement.anyOpenShowtimes && (
