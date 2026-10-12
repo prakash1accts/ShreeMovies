@@ -1,11 +1,14 @@
 import Link from "next/link";
-import { listAllBookings, listMovies, listActiveShowtimes } from "@/lib/data";
+import { listActiveBookings, listMovies, listActiveShowtimes } from "@/lib/data";
 
 export default async function AdminOverviewPage() {
+  // listActiveBookings (not listAllBookings) so a closed showtime's seats and
+  // revenue drop off this dashboard once it's closed — it stays fully
+  // available via Reports, which is where historical totals belong.
   const [movies, showtimes, bookings] = await Promise.all([
     listMovies(),
     listActiveShowtimes(),
-    listAllBookings(),
+    listActiveBookings(),
   ]);
   const paidBookings = bookings.filter((b) => b.status === "paid");
   const revenueCents = paidBookings.reduce((sum, b) => sum + b.total_cents, 0);
