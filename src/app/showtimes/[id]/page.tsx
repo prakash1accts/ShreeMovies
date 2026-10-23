@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
-import { getShowtime, listSeatsForShowtime } from "@/lib/data";
+import { getScreen, getShowtime, listSeatsForShowtime } from "@/lib/data";
 import { getSession } from "@/lib/auth";
 import SeatPicker from "@/components/SeatPicker";
 import { formatVenueDateTime } from "@/lib/timezone";
 import { BOOKING_CONTACT_PHONE } from "@/lib/payment-info";
+import { layoutGapAfterLabels } from "@/lib/real-screens";
 
 export default async function ShowtimePage({
   params,
@@ -14,8 +15,12 @@ export default async function ShowtimePage({
   const showtime = await getShowtime(id);
   if (!showtime) notFound();
 
-  const seats = await listSeatsForShowtime(id);
-  const session = await getSession();
+  const [seats, screen, session] = await Promise.all([
+    listSeatsForShowtime(id),
+    getScreen(showtime.screen_id),
+    getSession(),
+  ]);
+  const gapAfterLabels = layoutGapAfterLabels(screen?.layout_json);
 
   return (
     <div>
@@ -63,6 +68,7 @@ export default async function ShowtimePage({
           holdMinutes={showtime.hold_minutes}
           isLoggedIn={Boolean(session)}
           returnTo={`/showtimes/${showtime.id}`}
+          gapAfterLabels={gapAfterLabels}
         />
       )}
     </div>
