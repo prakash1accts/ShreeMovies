@@ -86,12 +86,19 @@ CREATE TABLE IF NOT EXISTS showtimes (
   -- Reversible from the same form. A showtime whose seats are genuinely all
   -- gone still reads "Sold out" too (see getSeatAvailabilityForShowtimes in
   -- data.ts) — this column only covers the extra, non-seat-count case.
-  sold_out_override BOOLEAN NOT NULL DEFAULT false
+  sold_out_override BOOLEAN NOT NULL DEFAULT false,
+  -- Optional per-row ticket price, as { "R": 2200000, "Q": 2200000, ... }
+  -- (row label -> price_cents, same unit as price_cents above). Null means
+  -- every row uses the flat price_cents like before. A row label missing
+  -- from the map also falls back to price_cents. Purely additive — existing
+  -- showtimes with no overrides behave exactly as before.
+  row_price_overrides JSONB
 );
 ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS hold_minutes INTEGER NOT NULL DEFAULT 15;
 ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
 ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS admin_only_booking BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS sold_out_override BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE showtimes ADD COLUMN IF NOT EXISTS row_price_overrides JSONB;
 
 -- One row per seat per showtime, created at showtime-creation time
 CREATE TABLE IF NOT EXISTS seats (
