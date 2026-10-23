@@ -23,6 +23,11 @@ export interface ScreenLayoutRow {
   // The exact seat numbers that exist in this row. Any number not listed is
   // a real gap in the physical row (aisle, pillar, door, step, etc.).
   seatNumbers: number[];
+  // True when there's a wider walkway/aisle behind this row than the usual
+  // row-to-row spacing (e.g. between a premium/recliner section and the
+  // rest of the house). Purely visual — drawn as extra space in the seat
+  // map, doesn't affect which seats exist or how they're booked.
+  gapAfter?: boolean;
 }
 
 export interface ScreenLayout {
