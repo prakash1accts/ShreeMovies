@@ -11,9 +11,13 @@ import { blockSeatsAction, unblockSeatsAction } from "@/app/actions/admin";
 export default function AdminSeatMapClient({
   showtimeId,
   seats,
+  gapAfterLabels = [],
 }: {
   showtimeId: string;
   seats: AdminSeatMapSeat[];
+  // Row labels that get a wider aisle gap drawn after them (see
+  // layoutGapAfterLabels in lib/real-screens.ts) — purely visual.
+  gapAfterLabels?: string[];
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
@@ -91,7 +95,8 @@ export default function AdminSeatMapClient({
         <>
           <div className="mt-8 overflow-x-auto px-2">
             <div className="flex w-fit flex-col gap-1.5">
-              {rows.map(([rowLabel, rowSeats]) => (
+              {rows.flatMap(([rowLabel, rowSeats]) => {
+                const rowEl = (
                 <div key={rowLabel} className="flex items-center gap-2">
                   <span className="w-4 shrink-0 text-xs text-neutral-500">{rowLabel}</span>
                   <div
@@ -149,7 +154,16 @@ export default function AdminSeatMapClient({
                     })}
                   </div>
                 </div>
-              ))}
+                );
+                if (gapAfterLabels.includes(rowLabel)) {
+                  return [
+                    rowEl,
+                    <div key={`${rowLabel}-gap-1`} className="h-7" aria-hidden="true" />,
+                    <div key={`${rowLabel}-gap-2`} className="h-7" aria-hidden="true" />,
+                  ];
+                }
+                return [rowEl];
+              })}
             </div>
           </div>
 
