@@ -253,6 +253,37 @@ export async function createGridScreenAction(
   return { error: undefined };
 }
 
+// Parses the Showtime form's optional "Row pricing" textarea — JSON like
+// {"R": 22000, "Q": 22000} in whole AOA (same unit as the main Price field,
+// not cents) — into a row_price_overrides map in price_cents. The textarea
+// is always pre-filled from the showtime's current overrides when editing,
+// so a blank textarea unambiguously means "no overrides, use flat price" —
+// returns null for that case, the parsed map otherwise, and throws a plain
+// Error with a message safe to show the admin for anything unparseable.
+function parseRowPriceOverridesField(formData: FormData): Record<string, number> | null {
+  const raw = String(formData.get("rowPriceOverrides") || "").trim();
+  if (!raw) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('Row pricing must be valid JSON, e.g. {"R": 22000, "Q": 22000}.');
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error('Row pricing must be a JSON object, e.g. {"R": 22000, "Q": 22000}.');
+  }
+  const result: Record<string, number> = {};
+  for (const [label, value] of Object.entries(parsed as Record<string, unknown>)) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new Error(`Row pricing for "${label}" must be a positive number.`);
+    }
+    result[label] = Math.round(n * 100);
+  }
+  return result;
+}
+
 export async function createShowtimeAction(
   _prevState: { error?: string } | undefined,
   formData: FormData
@@ -279,6 +310,13 @@ export async function createShowtimeAction(
     return { error: "Invalid date/time." };
   }
 
+  let rowPriceOverrides: Record<string, number> | null;
+  try {
+    rowPriceOverrides = parseRowPriceOverridesField(formData);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Invalid row pricing." };
+  }
+
   await createShowtime({
     movieId,
     screenId,
@@ -287,6 +325,7 @@ export async function createShowtimeAction(
     holdMinutes,
     adminOnlyBooking,
     soldOutOverride,
+    rowPriceOverrides,
   });
 
   revalidatePath("/admin/showtimes");
@@ -322,6 +361,13 @@ export async function updateShowtimeAction(
     return { error: "Invalid date/time." };
   }
 
+  let rowPriceOverrides: Record<string, number> | null;
+  try {
+    rowPriceOverrides = parseRowPriceOverridesField(formData);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Invalid row pricing." };
+  }
+
   const result = await updateShowtime({
     id,
     movieId,
@@ -331,6 +377,7 @@ export async function updateShowtimeAction(
     holdMinutes,
     adminOnlyBooking,
     soldOutOverride,
+    rowPriceOverrides,
   });
 
   if (result.error) return { error: result.error };
