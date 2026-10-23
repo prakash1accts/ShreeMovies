@@ -137,11 +137,14 @@ const salaVip: ScreenLayout = {
 
 // ---------- IMAX ----------
 // 16 rows (A front, closest to screen -> R back), up to 31 seats across.
-// Rows A-H, J, L run the full width (1-31) with no gaps. Rows M & N each
-// have a 3-seat wheelchair gap at 14-16. Row O is short (3-5, then 9-24).
-// Row P has single VIP/companion seats at 9 and 23 flanking a center
+// Rows A-H, J, L, M, N all run the full width (1-31) with no gaps.
+// Row O is short (3-24, no gap). Row P has single VIP/companion seats
+// at 9 and 23 flanking a center
 // block (10-22) plus a 3-seat VIP block at the far end (29-31). Rows Q and
-// R are the back-most premium/recliner rows (Q: 5-15, R: 1-20).
+// R are the back-most premium/recliner rows, centered under the screen
+// (Q: 11-21, R: 6-25) rather than packed to the left. There's a wider
+// walkway behind Q (between the recliners and the rest of the house),
+// so Q is marked gapAfter.
 const imax: ScreenLayout = {
   rows: [
     { label: "A", seatNumbers: range(1, 31) },
@@ -154,12 +157,12 @@ const imax: ScreenLayout = {
     { label: "H", seatNumbers: range(1, 31) },
     { label: "J", seatNumbers: range(1, 31) },
     { label: "L", seatNumbers: range(1, 31) },
-    { label: "M", seatNumbers: [...range(1, 13), ...range(17, 31)] },
-    { label: "N", seatNumbers: [...range(1, 13), ...range(17, 31)] },
-    { label: "O", seatNumbers: [3, 4, 5, ...range(9, 24)] },
+    { label: "M", seatNumbers: range(1, 31) },
+    { label: "N", seatNumbers: range(1, 31) },
+    { label: "O", seatNumbers: range(3, 24) },
     { label: "P", seatNumbers: [...range(9, 23), ...range(29, 31)] },
-    { label: "Q", seatNumbers: range(5, 15) },
-    { label: "R", seatNumbers: range(1, 20) },
+    { label: "Q", seatNumbers: range(11, 21), gapAfter: true },
+    { label: "R", seatNumbers: range(6, 25) },
   ],
 };
 
@@ -188,4 +191,12 @@ export function layoutMaxSeatNumber(layout: ScreenLayout): number {
     for (const n of row.seatNumbers) max = Math.max(max, n);
   }
   return max;
+}
+
+// Row labels that should get a wider visual aisle gap drawn after them in
+// the seat map (see ScreenLayoutRow.gapAfter). Safe to call with a plain
+// grid screen's null layout_json — returns an empty list.
+export function layoutGapAfterLabels(layout: ScreenLayout | null | undefined): string[] {
+  if (!layout) return [];
+  return layout.rows.filter((r) => r.gapAfter).map((r) => r.label);
 }
