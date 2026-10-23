@@ -1,10 +1,18 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createShowtimeAction, updateShowtimeAction } from "@/app/actions/admin";
 import type { Movie, Screen, Showtime } from "@/lib/types";
 import { splitVenueDateTime } from "@/lib/timezone";
 import { BOOKING_CONTACT_PHONE } from "@/lib/payment-info";
+import { IMAX_ROW_PRICE_TIERS } from "@/lib/real-screens";
+
+// IMAX_ROW_PRICE_TIERS is in price_cents; the Row pricing textarea is in
+// whole AOA, same unit as the main Price field, so admins never have to
+// think in cents.
+const IMAX_TIERS_AOA = Object.fromEntries(
+  Object.entries(IMAX_ROW_PRICE_TIERS).map(([label, cents]) => [label, cents / 100])
+);
 
 export default function AdminShowtimeForm({
   movies,
@@ -23,6 +31,17 @@ export default function AdminShowtimeForm({
   const { date: defaultDate, time: defaultTime } = showtime
     ? splitVenueDateTime(showtime.starts_at)
     : { date: undefined, time: undefined };
+
+  const [screenId, setScreenId] = useState(showtime?.screen_id ?? screens[0]?.id ?? "");
+  const [rowPricingText, setRowPricingText] = useState(() => {
+    if (!showtime?.row_price_overrides) return "";
+    const aoa = Object.fromEntries(
+      Object.entries(showtime.row_price_overrides).map(([label, cents]) => [label, cents / 100])
+    );
+    return JSON.stringify(aoa, null, 2);
+  });
+  const selectedScreenName = screens.find((s) => s.id === screenId)?.name;
+  const isImaxScreen = selectedScreenName === "IMAX";
 
   return (
     <form
@@ -50,7 +69,8 @@ export default function AdminShowtimeForm({
         <select
           name="screenId"
           required
-          defaultValue={showtime?.screen_id}
+          value={screenId}
+          onChange={(e) => setScreenId(e.target.value)}
           className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-red-500"
         >
           {screens.map((s) => {
@@ -118,6 +138,35 @@ export default function AdminShowtimeForm({
           automatically released back to the pool if payment isn&apos;t confirmed. Default is 15
           — raise it for high-demand showtimes so customers have more time to complete a bank
           transfer.
+        </p>
+      </div>
+      <div className="sm:col-span-2">
+        <div className="flex items-center justify-between gap-2">
+          <label className="mb-1 block text-sm text-neutral-300">
+            Row pricing (optional)
+          </label>
+          {isImaxScreen && (
+            <button
+              type="button"
+              onClick={() => setRowPricingText(JSON.stringify(IMAX_TIERS_AOA, null, 2))}
+              className="mb-1 rounded-md bg-neutral-800 px-2.5 py-1 text-xs font-medium text-neutral-200 hover:bg-neutral-700"
+            >
+              Fill IMAX tier pricing (R/Q/P 22000 · O–H 18000 · G–A 16000)
+            </button>
+          )}
+        </div>
+        <textarea
+          name="rowPriceOverrides"
+          value={rowPricingText}
+          onChange={(e) => setRowPricingText(e.target.value)}
+          rows={4}
+          placeholder='Leave blank for one flat price. Or set different prices per row, e.g. {"R": 22000, "Q": 22000}'
+          spellCheck={false}
+          className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-xs outline-none focus:border-red-500"
+        />
+        <p className="mt-1 text-xs text-neutral-500">
+          Optional JSON map of row letter → price in AOA (same unit as Price above). Any row left
+          out uses the flat Price. Leave this blank to charge every seat the same Price.
         </p>
       </div>
       <div className="sm:col-span-2">
