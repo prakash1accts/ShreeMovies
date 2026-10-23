@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getAdminSeatMapForShowtime, getShowtime } from "@/lib/data";
+import { getAdminSeatMapForShowtime, getScreen, getShowtime } from "@/lib/data";
 import { formatVenueDateTime } from "@/lib/timezone";
+import { layoutGapAfterLabels } from "@/lib/real-screens";
 import AdminSeatMapClient from "@/components/AdminSeatMapClient";
 
 // Read-only visual booking layout for one showtime — the actual seat grid
@@ -24,6 +25,9 @@ export default async function AdminShowtimeSeatsPage({
   ]);
   if (!showtime) notFound();
 
+  const screen = await getScreen(showtime.screen_id);
+  const gapAfterLabels = layoutGapAfterLabels(screen?.layout_json);
+
   return (
     <div>
       <Link href="/admin/showtimes" className="text-sm text-neutral-400 hover:text-neutral-200">
@@ -35,7 +39,7 @@ export default async function AdminShowtimeSeatsPage({
       <p className="text-sm text-neutral-500">{formatVenueDateTime(showtime.starts_at)}</p>
 
       <div className="mt-4">
-        <AdminSeatMapClient showtimeId={id} seats={seats} />
+        <AdminSeatMapClient showtimeId={id} seats={seats} gapAfterLabels={gapAfterLabels} />
       </div>
     </div>
   );
