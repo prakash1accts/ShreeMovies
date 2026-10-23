@@ -82,6 +82,10 @@ export interface Showtime {
   // in data.ts for the other, seat-count-based way a showtime reads as sold
   // out on the movie page.
   sold_out_override: boolean;
+  // Optional per-row ticket price (row label -> price_cents). Null/missing
+  // row = falls back to price_cents. See lib/real-screens.ts rowPriceCents()
+  // for the lookup helper used everywhere a seat's actual price is needed.
+  row_price_overrides: Record<string, number> | null;
 }
 
 // "blocked" is an admin-only state — a seat taken out of sale (broken seat,
