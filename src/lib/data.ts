@@ -662,13 +662,14 @@ export async function createShowtime(params: {
   holdMinutes?: number;
   adminOnlyBooking?: boolean;
   soldOutOverride?: boolean;
+  rowPriceOverrides?: Record<string, number> | null;
 }): Promise<Showtime> {
   const id = genId("sht");
 
   return withTransaction(async (client) => {
     const { rows } = await clientQuery<Showtime>(
       client,
-      "INSERT INTO showtimes (id, movie_id, screen_id, starts_at, price_cents, hold_minutes, admin_only_booking, sold_out_override) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
+      "INSERT INTO showtimes (id, movie_id, screen_id, starts_at, price_cents, hold_minutes, admin_only_booking, sold_out_override, row_price_overrides) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
       [
         id,
         params.movieId,
@@ -678,6 +679,7 @@ export async function createShowtime(params: {
         params.holdMinutes ?? 15,
         params.adminOnlyBooking ?? false,
         params.soldOutOverride ?? false,
+        params.rowPriceOverrides ? JSON.stringify(params.rowPriceOverrides) : null,
       ]
     );
 
@@ -715,6 +717,12 @@ export async function updateShowtime(params: {
   holdMinutes?: number;
   adminOnlyBooking?: boolean;
   soldOutOverride?: boolean;
+  // undefined = leave whatever row pricing the showtime already has alone;
+  // null = explicitly clear it back to flat price_cents; an object = replace
+  // it. (Distinct from the other optional fields above, which only fall
+  // back to the existing value on undefined — row pricing needs the extra
+  // "explicitly clear" case too.)
+  rowPriceOverrides?: Record<string, number> | null;
 }): Promise<{ error?: string }> {
   return withTransaction(async (client) => {
     const { rows: existingRows } = await clientQuery<Showtime>(
@@ -741,9 +749,14 @@ export async function updateShowtime(params: {
       }
     }
 
+    const nextRowPriceOverrides =
+      params.rowPriceOverrides === undefined
+        ? existing.row_price_overrides
+        : params.rowPriceOverrides;
+
     await clientQuery(
       client,
-      "UPDATE showtimes SET movie_id = $1, screen_id = $2, starts_at = $3, price_cents = $4, hold_minutes = $5, admin_only_booking = $6, sold_out_override = $7 WHERE id = $8",
+      "UPDATE showtimes SET movie_id = $1, screen_id = $2, starts_at = $3, price_cents = $4, hold_minutes = $5, admin_only_booking = $6, sold_out_override = $7, row_price_overrides = $8 WHERE id = $9",
       [
         params.movieId,
         params.screenId,
@@ -752,6 +765,7 @@ export async function updateShowtime(params: {
         params.holdMinutes ?? existing.hold_minutes ?? 15,
         params.adminOnlyBooking ?? existing.admin_only_booking ?? false,
         params.soldOutOverride ?? existing.sold_out_override ?? false,
+        nextRowPriceOverrides ? JSON.stringify(nextRowPriceOverrides) : null,
         params.id,
       ]
     );
