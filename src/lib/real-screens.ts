@@ -200,3 +200,39 @@ export function layoutGapAfterLabels(layout: ScreenLayout | null | undefined): s
   if (!layout) return [];
   return layout.rows.filter((r) => r.gapAfter).map((r) => r.label);
 }
+
+// A seat's actual price: its row's override if the showtime has one for
+// that row, otherwise the showtime's flat price_cents. Used everywhere a
+// seat needs a real price — the seat map, the checkout total, and the
+// server-side charge calculation — so there's exactly one place this logic
+// lives (see bookSeatsAction in app/actions/booking.ts for why that matters:
+// the server never trusts a client-submitted total).
+export function rowPriceCents(
+  showtime: { price_cents: number; row_price_overrides: Record<string, number> | null },
+  rowLabel: string
+): number {
+  return showtime.row_price_overrides?.[rowLabel] ?? showtime.price_cents;
+}
+
+// IMAX's three ticket tiers (all in price_cents, i.e. AOA * 100):
+// R, Q, P (the back premium/recliner rows) = 22000; O down through H = 18000;
+// G down through A (the rest of the house) = 16000. A named preset so it can
+// just be applied from the admin Showtime form instead of hand-typed.
+export const IMAX_ROW_PRICE_TIERS: Record<string, number> = {
+  R: 2200000,
+  Q: 2200000,
+  P: 2200000,
+  O: 1800000,
+  N: 1800000,
+  M: 1800000,
+  L: 1800000,
+  J: 1800000,
+  H: 1800000,
+  G: 1600000,
+  F: 1600000,
+  E: 1600000,
+  D: 1600000,
+  C: 1600000,
+  B: 1600000,
+  A: 1600000,
+};
