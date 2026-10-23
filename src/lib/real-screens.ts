@@ -135,6 +135,34 @@ const salaVip: ScreenLayout = {
   ],
 };
 
+// ---------- IMAX ----------
+// 16 rows (A front, closest to screen -> R back), up to 31 seats across.
+// Rows A-H, J, L run the full width (1-31) with no gaps. Rows M & N each
+// have a 3-seat wheelchair gap at 14-16. Row O is short (3-5, then 9-24).
+// Row P has single VIP/companion seats at 9 and 23 flanking a center
+// block (10-22) plus a 3-seat VIP block at the far end (29-31). Rows Q and
+// R are the back-most premium/recliner rows (Q: 5-15, R: 1-20).
+const imax: ScreenLayout = {
+  rows: [
+    { label: "A", seatNumbers: range(1, 31) },
+    { label: "B", seatNumbers: range(1, 31) },
+    { label: "C", seatNumbers: range(1, 31) },
+    { label: "D", seatNumbers: range(1, 31) },
+    { label: "E", seatNumbers: range(1, 31) },
+    { label: "F", seatNumbers: range(1, 31) },
+    { label: "G", seatNumbers: range(1, 31) },
+    { label: "H", seatNumbers: range(1, 31) },
+    { label: "J", seatNumbers: range(1, 31) },
+    { label: "L", seatNumbers: range(1, 31) },
+    { label: "M", seatNumbers: [...range(1, 13), ...range(17, 31)] },
+    { label: "N", seatNumbers: [...range(1, 13), ...range(17, 31)] },
+    { label: "O", seatNumbers: [3, 4, 5, ...range(9, 24)] },
+    { label: "P", seatNumbers: [...range(9, 23), ...range(29, 31)] },
+    { label: "Q", seatNumbers: range(5, 15) },
+    { label: "R", seatNumbers: range(1, 20) },
+  ],
+};
+
 export interface RealScreenDef {
   name: string;
   layout: ScreenLayout;
@@ -147,6 +175,7 @@ export const REAL_SCREENS: RealScreenDef[] = [
   { name: "Screen 6", layout: screen6 },
   { name: "Screen 7", layout: screen7 },
   { name: "Sala VIP", layout: salaVip },
+  { name: "IMAX", layout: imax },
 ];
 
 export function layoutSeatCount(layout: ScreenLayout): number {
