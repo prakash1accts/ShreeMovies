@@ -111,7 +111,15 @@ export default async function MovieDetailPage({
                           hour: "numeric",
                           minute: "2-digit",
                         })}
-                        <span className="ml-2 text-neutral-500">{st.screen_name}</span>
+                        <span
+                          className={
+                            st.screen_name === "IMAX"
+                              ? "ml-2 font-semibold text-blue-800"
+                              : "ml-2 text-neutral-500"
+                          }
+                        >
+                          {st.screen_name}
+                        </span>
                       </span>
                       {(() => {
                         const seats = availability[st.id];
