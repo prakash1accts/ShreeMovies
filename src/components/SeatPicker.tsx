@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useActionState } from "react";
 import { bookSeatsAction } from "@/app/actions/booking";
 import { previewPromoCodeAction } from "@/app/actions/promotions";
+import { rowPriceCents } from "@/lib/real-screens";
 import type { Seat } from "@/lib/types";
 
 export default function SeatPicker({
@@ -14,6 +15,7 @@ export default function SeatPicker({
   isLoggedIn,
   returnTo,
   gapAfterLabels = [],
+  rowPriceOverrides = null,
 }: {
   showtimeId: string;
   seats: Seat[];
@@ -24,6 +26,11 @@ export default function SeatPicker({
   // Row labels that get a wider aisle gap drawn after them (see
   // layoutGapAfterLabels in lib/real-screens.ts) — purely visual.
   gapAfterLabels?: string[];
+  // Optional per-row price (row label -> price_cents). A row missing from
+  // this map falls back to priceCents — see rowPriceCents in
+  // lib/real-screens.ts, the same lookup the server uses to charge the
+  // actual total, so what's shown here always matches what's charged.
+  rowPriceOverrides?: Record<string, number> | null;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [state, formAction, isPending] = useActionState(bookSeatsAction, undefined);
@@ -87,7 +94,13 @@ export default function SeatPicker({
     });
   }
 
-  const rawTotal = selected.size * priceCents;
+  function priceForSeat(seat: Seat) {
+    return rowPriceCents({ price_cents: priceCents, row_price_overrides: rowPriceOverrides }, seat.row_label);
+  }
+
+  const rawTotal = seats
+    .filter((s) => selected.has(s.id))
+    .reduce((sum, s) => sum + priceForSeat(s), 0);
   const discountAmount =
     promoStatus === "valid" && promoDiscount ? Math.round((rawTotal * promoDiscount) / 100) : 0;
   const total = rawTotal - discountAmount;
@@ -101,9 +114,25 @@ export default function SeatPicker({
       <div className="overflow-x-auto px-2">
         <div className="flex w-fit flex-col gap-1.5 mx-auto">
           {rows.flatMap(([rowLabel, rowSeats]) => {
+            const rowPriceDiffers = rowPriceCents(
+              { price_cents: priceCents, row_price_overrides: rowPriceOverrides },
+              rowLabel
+            ) !== priceCents;
             const rowEl = (
             <div key={rowLabel} className="flex items-center gap-2">
-              <span className="w-4 shrink-0 text-xs text-neutral-500">{rowLabel}</span>
+              <span className="w-10 shrink-0 text-right text-xs text-neutral-500">
+                {rowLabel}
+                {rowPriceDiffers && (
+                  <span className="ml-1 text-[10px] text-amber-500">
+                    {(
+                      rowPriceCents(
+                        { price_cents: priceCents, row_price_overrides: rowPriceOverrides },
+                        rowLabel
+                      ) / 100
+                    ).toFixed(0)}
+                  </span>
+                )}
+              </span>
               <div
                 className="grid gap-1.5"
                 style={{ gridTemplateColumns: `repeat(${maxCol}, 1.5rem)` }}
@@ -117,7 +146,7 @@ export default function SeatPicker({
                       type="button"
                       disabled={isTaken}
                       onClick={() => toggleSeat(seat)}
-                      title={`${rowLabel}${seat.col_number}${
+                      title={`${rowLabel}${seat.col_number} — AOA ${(priceForSeat(seat) / 100).toFixed(2)}${
                         seat.status === "held"
                           ? " — held, payment pending"
                           : seat.status === "booked"
@@ -168,6 +197,13 @@ export default function SeatPicker({
           Screen
         </div>
       </div>
+
+      {rowPriceOverrides && (
+        <p className="mt-3 text-center text-xs text-neutral-500">
+          Prices vary by row — the number next to a row letter (in amber) is that row&apos;s price
+          in AOA, if different from the base price. Tap a seat to see its exact price.
+        </p>
+      )}
 
       <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-neutral-400">
         <span className="flex items-center gap-2">
