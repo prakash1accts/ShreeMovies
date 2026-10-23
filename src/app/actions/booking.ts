@@ -13,6 +13,7 @@ import {
   getUserById,
   releasePromoCode,
 } from "@/lib/data";
+import { rowPriceCents } from "@/lib/real-screens";
 import type { PromoCode } from "@/lib/types";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { formatVenueDateTime } from "@/lib/timezone";
@@ -63,7 +64,11 @@ export async function bookSeatsAction(
     return { error: "One or more selected seats were just taken. Please pick again." };
   }
 
-  const rawTotalCents = seats.length * showtime.price_cents;
+  // Computed server-side from each seat's actual row — never trust a
+  // client-submitted total. Most showtimes have no row_price_overrides, in
+  // which case rowPriceCents just returns showtime.price_cents for every
+  // seat and this is identical to the old flat `seats.length * price_cents`.
+  const rawTotalCents = seats.reduce((sum, seat) => sum + rowPriceCents(showtime, seat.row_label), 0);
 
   // A promo code is optional — only validated (and only ever locks/burns
   // the code) when one was actually entered, so booking without a code
