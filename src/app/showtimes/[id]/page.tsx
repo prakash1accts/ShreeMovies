@@ -37,7 +37,12 @@ export default async function ShowtimePage({
           · {showtime.theater_name} · {showtime.screen_name}
         </p>
         <p className="mt-1 text-sm text-neutral-500">
-          AOA {(showtime.price_cents / 100).toFixed(2)} per seat
+          {showtime.row_price_overrides
+            ? `From AOA ${(
+                Math.min(showtime.price_cents, ...Object.values(showtime.row_price_overrides)) /
+                100
+              ).toFixed(2)} per seat`
+            : `AOA ${(showtime.price_cents / 100).toFixed(2)} per seat`}
         </p>
       </div>
 
@@ -69,6 +74,7 @@ export default async function ShowtimePage({
           isLoggedIn={Boolean(session)}
           returnTo={`/showtimes/${showtime.id}`}
           gapAfterLabels={gapAfterLabels}
+          rowPriceOverrides={showtime.row_price_overrides}
         />
       )}
     </div>
