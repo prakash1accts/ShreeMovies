@@ -13,6 +13,7 @@ export default function SeatPicker({
   holdMinutes,
   isLoggedIn,
   returnTo,
+  gapAfterLabels = [],
 }: {
   showtimeId: string;
   seats: Seat[];
@@ -20,6 +21,9 @@ export default function SeatPicker({
   holdMinutes: number;
   isLoggedIn: boolean;
   returnTo: string;
+  // Row labels that get a wider aisle gap drawn after them (see
+  // layoutGapAfterLabels in lib/real-screens.ts) — purely visual.
+  gapAfterLabels?: string[];
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [state, formAction, isPending] = useActionState(bookSeatsAction, undefined);
@@ -96,7 +100,8 @@ export default function SeatPicker({
           at the true left edge, row labels included) when it's wider. */}
       <div className="overflow-x-auto px-2">
         <div className="flex w-fit flex-col gap-1.5 mx-auto">
-          {rows.map(([rowLabel, rowSeats]) => (
+          {rows.flatMap(([rowLabel, rowSeats]) => {
+            const rowEl = (
             <div key={rowLabel} className="flex items-center gap-2">
               <span className="w-4 shrink-0 text-xs text-neutral-500">{rowLabel}</span>
               <div
@@ -141,7 +146,16 @@ export default function SeatPicker({
                 })}
               </div>
             </div>
-          ))}
+            );
+            if (gapAfterLabels.includes(rowLabel)) {
+              return [
+                rowEl,
+                <div key={`${rowLabel}-gap-1`} className="h-6" aria-hidden="true" />,
+                <div key={`${rowLabel}-gap-2`} className="h-6" aria-hidden="true" />,
+              ];
+            }
+            return [rowEl];
+          })}
         </div>
       </div>
 
